@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background-color: #f8fafc;
+    color: #0f172a;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-primary { @apply btn bg-brand-600 text-white hover:bg-brand-700 shadow-sm; }
+  .btn-secondary { @apply btn bg-neutral-100 text-neutral-900 hover:bg-neutral-200; }
+  .btn-outline { @apply btn border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-900; }
+  .btn-danger { @apply btn bg-danger-600 text-white hover:bg-danger-700; }
+  .input {
+    @apply flex h-10 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .label { @apply text-sm font-medium text-neutral-800; }
+  .card { @apply rounded-xl border border-neutral-200 bg-white shadow-sm; }
+  .card-header { @apply flex flex-col gap-1 p-6 border-b border-neutral-100; }
+  .card-body { @apply p-6; }
+  .card-title { @apply text-xl font-semibold leading-none tracking-tight; }
+  .card-subtitle { @apply text-sm text-neutral-500; }
+  .badge { @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors; }
+}

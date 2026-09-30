@@ -1,0 +1,408 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/client/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CurrencyCode {
+  BRL
+  USD
+  EUR
+  ARS
+  GBP
+  JPY
+}
+
+enum FinancialSpaceState {
+  active
+  archived
+}
+
+enum FinancialSpaceRole {
+  owner
+  admin
+  contributor
+  viewer
+}
+
+enum MembershipStatus {
+  active
+  invited
+  revoked
+}
+
+enum AccountType {
+  checking
+  savings
+  cash
+  wallet
+  credit_card
+  investment
+}
+
+enum CategoryType {
+  income
+  expense
+  both
+}
+
+enum EntityState {
+  active
+  archived
+}
+
+enum TransactionType {
+  income
+  expense
+  transfer
+  adjustment
+}
+
+enum TransactionStatus {
+  scheduled
+  pending
+  confirmed
+  canceled
+}
+
+enum PostingDirection {
+  debit
+  credit
+}
+
+enum ObligationStatus {
+  forecast
+  pending
+  partially_reconciled
+  reconciled
+  overdue
+  ignored
+  canceled
+}
+
+model User {
+  id              String       @id @default(uuid())
+  email           String       @unique
+  emailVerifiedAt DateTime?
+  name            String?
+  passwordHash    String?
+  oidcSub         String?      @unique
+  timezone        String       @default("America/Sao_Paulo")
+  locale          String       @default("pt-BR")
+  pictureUrl      String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  lastLoginAt     DateTime?
+  memberships     Membership[]
+  auditLogs       AuditLog[]
+
+  @@map("users")
+}
+
+model FinancialSpace {
+  id              String               @id @default(uuid())
+  name            String
+  primaryCurrency CurrencyCode         @default(BRL)
+  timezone        String               @default("America/Sao_Paulo")
+  state           FinancialSpaceState  @default(active)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  version         Int                  @default(0)
+  memberships     Membership[]
+  accounts        Account[]
+  categories      Category[]
+  transactions    Transaction[]
+  budgets         Budget[]
+  goals           Goal[]
+  auditLogs       AuditLog[]
+  outboxEvents    OutboxEvent[]
+  recurrenceRules RecurrenceRule[]
+  obligations     Obligation[]
+
+  @@unique([id])
+  @@map("financial_spaces")
+}
+
+model Membership {
+  id               String              @id @default(uuid())
+  financialSpaceId String
+  userId           String
+  role             FinancialSpaceRole  @default(contributor)
+  status           MembershipStatus    @default(active)
+  invitedEmail     String?
+  invitedAt        DateTime?
+  inviteAcceptedAt DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([financialSpaceId, userId])
+  @@index([userId, status])
+  @@map("memberships")
+}
+
+model Account {
+  id               String               @id @default(uuid())
+  financialSpaceId String
+  name             String
+  type             AccountType
+  currency         CurrencyCode         @default(BRL)
+  initialBalance   Decimal              @default(0) @db.Decimal(19, 4)
+  initialBalanceDate DateTime            @db.Date
+  institution      String?
+  branch           String?
+  number           String?
+  color            String?
+  icon             String?
+  state            EntityState          @default(active)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  version          Int                  @default(0)
+
+  financialSpace FinancialSpace  @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+  postings       Posting[]
+  creditCards    CreditCard[]
+
+  @@index([financialSpaceId, state, type])
+  @@map("accounts")
+}
+
+model Category {
+  id               String               @id @default(uuid())
+  financialSpaceId String
+  name             String
+  type             CategoryType
+  color            String?
+  icon             String?
+  parentId         String?
+  state            EntityState          @default(active)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+  parent         Category?      @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children       Category[]     @relation("CategoryHierarchy")
+  transactions   Transaction[]
+  budgets        Budget[]
+
+  @@unique([financialSpaceId, name, parentId])
+  @@index([financialSpaceId, type, state])
+  @@map("categories")
+}
+
+model Transaction {
+  id               String               @id @default(uuid())
+  financialSpaceId String
+  type             TransactionType
+  status           TransactionStatus    @default(confirmed)
+  description      String
+  notes            String?
+  categoryId       String?
+  currency         CurrencyCode         @default(BRL)
+  totalAmount      Decimal              @db.Decimal(19, 4)
+  effectiveDate    DateTime             @db.Date
+  dueDate          DateTime?            @db.Date
+  tags             String[]             @default([])
+  version          Int                  @default(0)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  idempotencyKey   String?
+
+  financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+  category       Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  postings       Posting[]
+  reconciledObligation Obligation? @relation("ObligationReconciliation")
+
+  @@unique([financialSpaceId, idempotencyKey])
+  @@index([financialSpaceId, effectiveDate, status, type])
+  @@index([financialSpaceId, categoryId])
+  @@map("transactions")
+}
+
+model Posting {
+  id            String           @id @default(uuid())
+  transactionId String
+  accountId     String
+  amount        Decimal          @db.Decimal(19, 4)
+  direction     PostingDirection
+  effectiveDate DateTime         @db.Date
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  account     Account     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, effectiveDate])
+  @@index([transactionId])
+  @@map("postings")
+}
+
+model CreditCard {
+  id               String         @id @default(uuid())
+  accountId        String         @unique
+  name             String
+  limit            Decimal        @db.Decimal(19, 4)
+  closingDay       Int
+  dueDay           Int
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  account  Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  invoices Invoice[]
+
+  @@map("credit_cards")
+}
+
+model Invoice {
+  id            String           @id @default(uuid())
+  creditCardId  String
+  cycleStart    DateTime         @db.Date
+  cycleEnd      DateTime         @db.Date
+  closingDate   DateTime         @db.Date
+  dueDate       DateTime         @db.Date
+  totalAmount   Decimal          @default(0) @db.Decimal(19, 4)
+  paidAmount    Decimal          @default(0) @db.Decimal(19, 4)
+  status        String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  creditCard   CreditCard @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+
+  @@index([creditCardId, cycleStart, status])
+  @@map("invoices")
+}
+
+model RecurrenceRule {
+  id               String               @id @default(uuid())
+  financialSpaceId String
+  frequency        String
+  interval         Int                  @default(1)
+  startDate        DateTime             @db.Date
+  endDate          DateTime?            @db.Date
+  occurrencesLimit Int?
+  template         Json
+  timezone         String               @default("America/Sao_Paulo")
+  state            EntityState          @default(active)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+  obligations    Obligation[]
+
+  @@map("recurrence_rules")
+}
+
+model Obligation {
+  id               String               @id @default(uuid())
+  financialSpaceId String
+  recurrenceRuleId String?
+  status           ObligationStatus     @default(forecast)
+  type             String
+  description      String
+  currency         CurrencyCode         @default(BRL)
+  amount           Decimal              @db.Decimal(19, 4)
+  dueDate          DateTime             @db.Date
+  transactionId    String?              @unique
+
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  financialSpace      FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+  recurrenceRule      RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
+  reconciledTransaction Transaction?  @relation("ObligationReconciliation", fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@index([financialSpaceId, dueDate, status])
+  @@map("obligations")
+}
+
+model Budget {
+  id               String       @id @default(uuid())
+  financialSpaceId String
+  periodStart      DateTime     @db.Date
+  periodEnd        DateTime     @db.Date
+  categoryId       String?
+  amountLimit      Decimal      @db.Decimal(19, 4)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+  category       Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@unique([financialSpaceId, periodStart, periodEnd, categoryId])
+  @@map("budgets")
+}
+
+model Goal {
+  id               String               @id @default(uuid())
+  financialSpaceId String
+  name             String
+  targetAmount     Decimal              @db.Decimal(19, 4)
+  currentAmount    Decimal              @default(0) @db.Decimal(19, 4)
+  deadline         DateTime?            @db.Date
+  color            String?
+  icon             String?
+  state            EntityState          @default(active)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+
+  @@map("goals")
+}
+
+model IdempotencyRecord {
+  id               String   @id @default(uuid())
+  financialSpaceId String
+  idempotencyKey   String
+  clientId         String?
+  requestFingerprint String
+  responsePayload  Json
+  createdAt        DateTime @default(now())
+  expiresAt        DateTime?
+
+  @@unique([financialSpaceId, idempotencyKey])
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
+
+model AuditLog {
+  id               String   @id @default(uuid())
+  financialSpaceId String?
+  userId           String?
+  correlationId    String?
+  operation        String
+  entityType       String
+  entityId         String
+  safeSummary      Json
+  createdAt        DateTime @default(now())
+
+  financialSpace FinancialSpace? @relation(fields: [financialSpaceId], references: [id], onDelete: SetNull)
+  user           User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([financialSpaceId, entityType, createdAt])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}
+
+model OutboxEvent {
+  id               String   @id @default(uuid())
+  financialSpaceId String
+  eventType        String
+  payload          Json
+  status           String   @default("pending")
+  publishedAt      DateTime?
+  attempts         Int      @default(0)
+  nextAttemptAt    DateTime?
+  lastError        String?
+  createdAt        DateTime @default(now())
+
+  financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@map("outbox_events")
+}

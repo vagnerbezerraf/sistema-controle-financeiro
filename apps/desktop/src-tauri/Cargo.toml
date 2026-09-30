@@ -1,0 +1,53 @@
+[package]
+name = "scf-desktop"
+version = "0.1.0"
+description = "SCF — Aplicativo desktop (Tauri 2)"
+authors = ["SCF Team"]
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0", features = [
+  "tray-icon",
+  "image-png",
+  "dialog-open",
+  "dialog-save",
+  "fs-copy-file",
+  "fs-create-dir",
+  "fs-exists",
+  "fs-read-dir",
+  "fs-read-file",
+  "fs-remove-dir",
+  "fs-remove-file",
+  "fs-rename",
+  "fs-write-file",
+  "notification-all",
+  "os-all",
+  "shell-open",
+  "updater",
+  "window-all",
+] }
+tauri-plugin-dialog = "2.0"
+tauri-plugin-fs = "2.0"
+tauri-plugin-notification = "2.0"
+tauri-plugin-os = "2.0"
+tauri-plugin-shell = "2.0"
+tauri-plugin-updater = "2.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+updater = ["tauri/updater", "tauri-plugin-updater"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

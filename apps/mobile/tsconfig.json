@@ -1,0 +1,22 @@
+{
+  "extends": "@scf/config/tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "types": ["node", "nativewind/types"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@api/*": ["../../packages/api-contracts/src/*"],
+      "@tokens/*": ["../../packages/design-tokens/src/*"]
+    },
+    "allowJs": true,
+    "jsx": "react-native",
+    "noEmit": true,
+    "strictNullChecks": true,
+    "experimentalDecorators": false,
+    "emitDecoratorMetadata": false,
+    "useDefineForClassFields": true
+  },
+  "include": ["src", "app", "index.ts", "nativewind-env.d.ts"],
+  "exclude": ["node_modules"]
+}

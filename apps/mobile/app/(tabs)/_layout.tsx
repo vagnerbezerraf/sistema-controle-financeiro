@@ -1,0 +1,57 @@
+import { Tabs } from 'expo-router';
+import { LayoutDashboard, ArrowLeftRight, Wallet, Plus, User } from 'lucide-react-native';
+import { Pressable, View, StyleSheet } from 'react-native';
+
+function NewButton({ onPress }: { onPress: () => void }) {
+  return (
+    <View style={styles.plusWrap}>
+      <Pressable android_ripple={{ color: '#ffffff20' }} style={styles.plusBtn} onPress={onPress}>
+        <Plus size={24} color="white" />
+      </Pressable>
+    </View>
+  );
+}
+
+export default function TabsLayout() {
+  return (
+    <Tabs
+      screenOptions={{
+        headerShown: true,
+        tabBarStyle: { height: 62, borderTopWidth: 1, borderTopColor: '#e2e8f0', backgroundColor: '#ffffff' },
+        tabBarActiveTintColor: '#1e57f5',
+        tabBarInactiveTintColor: '#64748b',
+        tabBarLabelStyle: { fontSize: 12, paddingBottom: 6 },
+      }}
+    >
+      <Tabs.Screen name="dashboard" options={{
+        title: 'Dashboard',
+        tabBarIcon: ({ color }) => <LayoutDashboard size={22} color={color} />,
+      }} />
+      <Tabs.Screen name="transactions" options={{
+        title: 'Lancamentos',
+        tabBarIcon: ({ color }) => <ArrowLeftRight size={22} color={color} />,
+        headerRight: () => <NewButton onPress={() => {}} />,
+      }} />
+      <Tabs.Screen name="accounts" options={{
+        title: 'Contas',
+        tabBarIcon: ({ color }) => <Wallet size={22} color={color} />,
+      }} />
+      <Tabs.Screen name="profile" options={{
+        title: 'Perfil',
+        tabBarIcon: ({ color }) => <User size={22} color={color} />,
+      }} />
+    </Tabs>
+  );
+}
+
+const styles = StyleSheet.create({
+  plusWrap: { marginRight: 12 },
+  plusBtn: {
+    backgroundColor: '#1e57f5',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

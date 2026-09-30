@@ -1,0 +1,33 @@
+{
+  "name": "sistema-controle-financeiro",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema de Controle Financeiro Pessoal e Familiar",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "dev:api": "turbo run dev --filter=@scf/api",
+    "dev:web": "turbo run dev --filter=@scf/web",
+    "dev:desktop": "turbo run dev --filter=@scf/desktop",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "clean": "turbo run clean && rm -rf node_modules .turbo dist build",
+    "db:migrate": "turbo run db:migrate --filter=@scf/api",
+    "db:generate": "turbo run db:generate --filter=@scf/api",
+    "db:studio": "turbo run db:studio --filter=@scf/api"
+  },
+  "devDependencies": {
+    "turbo": "^2.2.0",
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.3.0"
+  }
+}

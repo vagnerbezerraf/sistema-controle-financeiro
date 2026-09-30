@@ -1,0 +1,31 @@
+{
+  "name": "@scf/worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Worker de background para jobs (BullMQ/Redis) do SCF.",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts",
+    "test:unit": "vitest run src --passWithNoTests",
+    "clean": "rimraf dist .turbo node_modules/.cache"
+  },
+  "dependencies": {
+    "bullmq": "^5.12.0",
+    "ioredis": "^5.4.0",
+    "dotenv": "^16.4.0",
+    "envalid": "^8.0.0",
+    "@prisma/client": "5.19.0",
+    "pino": "^9.4.0"
+  },
+  "devDependencies": {
+    "@scf/config": "workspace:*",
+    "typescript": "^5.6.0",
+    "tsx": "^4.19.0",
+    "rimraf": "^6.0.0",
+    "vitest": "^2.0.0",
+    "@types/node": "^22.0.0"
+  }
+}

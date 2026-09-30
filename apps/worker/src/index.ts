@@ -1,0 +1,137 @@
+import 'dotenv/config';
+import { cleanEnv, host, num, str } from 'envalid';
+import { Queue, Worker, QueueEvents } from 'bullmq';
+import IORedis from 'ioredis';
+import { PrismaClient } from '@prisma/client';
+import { pino } from 'pino';
+
+const logger = pino({ name: 'scf-worker' });
+
+const env = cleanEnv(process.env, {
+  REDIS_HOST: host({ default: '127.0.0.1' }),
+  REDIS_PORT: num({ default: 6379 }),
+  REDIS_PASSWORD: str({ default: '' }),
+  NODE_ENV: str({ default: 'development', choices: ['development', 'production', 'test'] }),
+  DATABASE_URL: str({ default: 'postgresql://scf:scf_dev_password@127.0.0.1:5432/scf?schema=public' }),
+});
+
+function makeRedis() {
+  return new IORedis({
+    host: env.REDIS_HOST,
+    port: env.REDIS_PORT,
+    password: env.REDIS_PASSWORD || undefined,
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    lazyConnect: true,
+  });
+}
+
+const prisma = new PrismaClient({
+  datasources: { db: { url: env.DATABASE_URL } },
+});
+
+type JobTypes = {
+  'outbox:process': { cursorId?: string };
+  'obligations:reminder': { spaceId?: string };
+  'recurrence:generate': { ruleId?: string; upToDate?: string };
+  'reports:cache': { spaceId: string; period: string };
+};
+
+type JobName = keyof JobTypes;
+
+export const QUEUES = {
+  outbox: 'scf.outbox',
+  obligations: 'scf.obligations',
+  recurrence: 'scf.recurrence',
+  reports: 'scf.reports',
+} as const;
+
+type QueueKey = keyof typeof QUEUES;
+
+const queuesByJob: Record<JobName, QueueKey> = {
+  'outbox:process': 'outbox',
+  'obligations:reminder': 'obligations',
+  'recurrence:generate': 'recurrence',
+  'reports:cache': 'reports',
+};
+
+const queueInstances: Record<string, Queue> = {};
+
+export function getQueue(name: QueueKey): Queue {
+  if (!queueInstances[name]) {
+    queueInstances[name] = new Queue(QUEUES[name], { connection: makeRedis(), defaultJobOptions: { removeOnComplete: 200, removeOnFail: 500, attempts: 3, backoff: { type: 'exponential', delay: 5000 } } });
+  }
+  return queueInstances[name];
+}
+
+export async function enqueue<T extends JobName>(name: T, data: JobTypes[T], opts?: any) {
+  const q = queuesByJob[name] ?? 'outbox';
+  const queue = getQueue(q);
+  return queue.add(name as string, data, opts);
+}
+
+async function bootstrap() {
+  logger.info({ env: env.NODE_ENV }, 'Iniciando worker SCF...');
+
+  await prisma.$connect().catch((e: unknown) => logger.warn({ err: (e as Error)?.message }, 'Prisma nao conectou (Redis standalone sem DB ok)'));
+
+  const workers: Worker[] = [];
+  const qevs: QueueEvents[] = [];
+
+  const makeWorker = (name: QueueKey, handler: (jobName: string, data: any) => Promise<void>) => {
+    const w = new Worker(
+      QUEUES[name],
+      async (job) => {
+        logger.info({ name: job.name, id: job.id, queue: name }, 'Processando job');
+        try {
+          await handler(job.name, job.data);
+        } catch (err: any) {
+          logger.error({ err: err?.message, name: job.name, id: job.id }, 'Falha job');
+          throw err;
+        }
+      },
+      { connection: makeRedis(), concurrency: 4 },
+    );
+    const qev = new QueueEvents(QUEUES[name], { connection: makeRedis() });
+    workers.push(w);
+    qevs.push(qev);
+    return w;
+  };
+
+  makeWorker('outbox', async (_name, _data) => {
+    logger.info('Processando outbox pattern (placeholder)');
+  });
+
+  makeWorker('obligations', async (_name, _data) => {
+    logger.info('Enviando lembretes de obrigacoes (placeholder)');
+  });
+
+  makeWorker('recurrence', async (_name, _data) => {
+    logger.info('Gerando receitas/despesas recorrentes (placeholder)');
+  });
+
+  makeWorker('reports', async (_name, _data) => {
+    logger.info('Cacheando relatorios (placeholder)');
+  });
+
+  const shutdown = async (sig: string) => {
+    logger.info({ sig }, 'Encerrando worker...');
+    await Promise.all([
+      ...workers.map((w) => w.close()),
+      ...qevs.map((q) => q.close()),
+      ...Object.values(queueInstances).map((q) => q.close()),
+    ]);
+    await prisma.$disconnect().catch(() => {});
+    process.exit(0);
+  };
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+  logger.info({ queues: Object.values(QUEUES) }, 'Workers prontos');
+}
+
+bootstrap().catch((e) => {
+  logger.fatal({ err: e?.message }, 'Falha no bootstrap do worker');
+  process.exit(1);
+});

@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: scf-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-scf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scf_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-scf}
+      PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: America/Sao_Paulo
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/containers/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-scf} -d ${POSTGRES_DB:-scf}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: scf-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes', '--requirepass', '${REDIS_PASSWORD:-scf_redis_secret}']
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '--pass', '${REDIS_PASSWORD:-scf_redis_secret}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - optional
+      - full
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: scf-mailhog
+    restart: unless-stopped
+    ports:
+      - '${MAILHOG_SMTP_PORT:-1025}:1025'
+      - '${MAILHOG_WEB_PORT:-8025}:8025'
+    profiles:
+      - optional
+      - full
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: scf-network
