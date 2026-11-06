@@ -61,26 +61,41 @@ export const color = {
     900: '#0f172a',
     950: '#020617',
   },
+  // A paleta substitui a padrão do Tailwind (`colors: color`), então `white`
+  // precisa existir explicitamente para `bg-white`/`text-white` funcionarem.
+  white: '#ffffff',
 } as const;
 
+// A escala substitui a padrão do Tailwind (`spacing`), então os passos usados
+// na UI precisam existir aqui: os fracionários (0.5/1.5/2.5) e os valores
+// deslocados (9/64) que não fazem parte da escala customizada original.
 export const spacing = {
   px: '1px',
   0: '0',
+  0.5: '0.125rem',
   1: '0.25rem',
+  1.5: '0.375rem',
   2: '0.5rem',
+  2.5: '0.625rem',
   3: '0.75rem',
   4: '1rem',
   5: '1.25rem',
   6: '1.5rem',
   8: '2rem',
+  9: '2.25rem',
   10: '2.5rem',
   12: '3rem',
+  14: '3.5rem',
   16: '4rem',
   20: '5rem',
   24: '6rem',
+  64: '16rem',
 } as const;
 
 export const radius = {
+  // A escala substitui a padrão do Tailwind (`borderRadius: radius`), então
+  // `DEFAULT` precisa existir para a classe `rounded` funcionar.
+  DEFAULT: '0.25rem',
   sm: '0.25rem',
   md: '0.5rem',
   lg: '0.75rem',

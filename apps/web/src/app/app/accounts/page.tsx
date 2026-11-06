@@ -39,7 +39,7 @@ export default function AccountsPage() {
               </div>
             ))
           : accounts.map((a) => (
-              <Link key={a.id} href={`/app/accounts/${a.id}`} className="card transition-fast hover:-translate-y-0.5 hover:shadow-md">
+              <Link key={a.id} href={`/app/accounts/${a.id}`} className="card transition duration-fast hover:-translate-y-0.5 hover:shadow-md">
                 <div className="card-body flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">

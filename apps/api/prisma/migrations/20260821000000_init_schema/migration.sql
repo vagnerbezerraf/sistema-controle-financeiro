@@ -261,12 +261,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-SELECT format(
-  'CREATE TRIGGER set_updated_at_%I BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION set_updated_at();',
-  table_name, table_name
-)
-FROM information_schema.tables
-WHERE table_schema = 'public'
-  AND table_name IN ('users','financial_spaces','memberships','accounts','categories','transactions','credit_cards','invoices','recurrence_rules','obligations','budgets','goals');
-
-\gexec
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['users','financial_spaces','memberships','accounts','categories','transactions','credit_cards','invoices','recurrence_rules','obligations','budgets','goals']
+  LOOP
+    EXECUTE format(
+      'CREATE TRIGGER set_updated_at_%I BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION set_updated_at();',
+      t, t
+    );
+  END LOOP;
+END;
+$$;

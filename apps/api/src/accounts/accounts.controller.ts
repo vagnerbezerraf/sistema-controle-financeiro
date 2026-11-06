@@ -18,6 +18,7 @@ import {
   AuthenticatedUser,
 } from '../common/auth/auth.guard';
 import { CreateAccountRequest, UpdateAccountRequest } from './http/dto';
+import { toDate } from '../common/utils/date';
 
 @ApiTags('accounts')
 @Controller('financial-spaces/:spaceId/accounts')
@@ -52,7 +53,7 @@ export class AccountsController {
           type: body.type,
           currency: body.currency ?? 'BRL',
           initialBalance: body.initialBalance ?? '0',
-          initialBalanceDate: body.initialBalanceDate ?? new Date().toISOString().slice(0, 10),
+          initialBalanceDate: body.initialBalanceDate ? toDate(body.initialBalanceDate) : new Date(),
           institution: body.institution,
           branch: body.branch,
           number: body.number,

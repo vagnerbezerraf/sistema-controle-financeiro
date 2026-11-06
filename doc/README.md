@@ -1,14 +1,16 @@
 # Sistema de Controle Financeiro — documentação
 
 > Status: **Implementação em andamento**  
-> Fase do roadmap: **Fase 0 (Fundação e scaffold) em ~80% concluída**  
-> Última atualização: 30 de setembro de 2026  
+> Fase do roadmap: **Fase 0 (Fundação e scaffold) concluída** — scaffold completo, incluindo o build real do desktop (Tauri 2 + Rust) com instaladores MSI/NSIS  
+> Última atualização: 6 de novembro de 2026  
 > Referência do status real da implementação: **[doc/09-estado-atual-e-checklist.md](./09-estado-atual-e-checklist.md)** — LEIA PRIMEIRO se for retomar o projeto após um período parado.
 
 Este diretório reúne **a visão inicial do produto** (proposta de 13 de agosto de 2026, que serviu de base ao scaffolding) **mais o estado real da implementação atual** com o checklist de conclusão por fase, itens missing e lições aprendidas já aplicadas.
 
 - **Documentos de planejamento/produto** (arquitetura proposta, tecnologias, modelo de domínio, segurança, roadmap): os 8 primeiros documentos abaixo, gerados antes do início do código.
 - **Documento de estado real da implementação**: o 9º arquivo abaixo, **que descreve o que já está feito hoje, o que falta, próximos passos e lições de erros já resolvidos**.
+- **Documento de governança**: o 10º arquivo, com o threat model inicial, a classificação de dados e as diretrizes LGPD.
+- **Registros de decisão de arquitetura (ADR)**: do 11º em diante.
 
 ## Documentos
 
@@ -21,6 +23,8 @@ Este diretório reúne **a visão inicial do produto** (proposta de 13 de agosto
 7. [Roadmap sugerido](./07-roadmap.md)
 8. [Aplicativo desktop](./08-aplicativo-desktop.md)
 9. **[Estado atual, checklist e próximos passos](./09-estado-atual-e-checklist.md)** ⬅️ **leia primeiro se está retomando o projeto.**
+10. [Threat model inicial, classificação de dados e LGPD](./10-threat-model-e-lgpd.md)
+11. [ADR 001 · Autenticação federada com OIDC Authorization Code + PKCE](./11-adr-oidc-pkce.md)
 
 ## Resumo da proposta
 

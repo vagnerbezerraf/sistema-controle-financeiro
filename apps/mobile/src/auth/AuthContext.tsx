@@ -9,8 +9,9 @@ interface AuthState {
   loading: boolean;
   loggedIn: boolean;
   roleInCurrentSpace: FinancialSpaceRole | null;
-  login: (email: string, password: string) => Promise<AuthResponse>;
+  login: (email: string, password: string, mfaCode?: string) => Promise<AuthResponse>;
   register: (input: { email: string; password?: string; name?: string; timezone?: string }) => Promise<AuthResponse>;
+  applySession: (res: AuthResponse) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   setCurrentSpace: (id: string) => Promise<void>;
@@ -56,9 +57,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const tokens = await apiFetch<AuthResponse>('/identity/refresh', {
               method: 'POST', json: { refreshToken: refresh }, publicEndpoint: true,
             });
+            if (!tokens.accessToken || !tokens.refreshToken) throw new Error('Refresh invalido');
             await setTokens(tokens.accessToken, tokens.refreshToken);
             return bootstrap();
-          } catch {}
+          } catch {
+            // Falha ao renovar a sessao: prossegue para limpeza das credenciais.
+          }
         }
       }
       await clearTokens();
@@ -66,21 +70,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function login(email: string, password: string) {
+  async function login(email: string, password: string, mfaCode?: string) {
     const res = await apiFetch<AuthResponse>('/identity/login', {
-      method: 'POST', json: { email, password }, publicEndpoint: true,
+      method: 'POST', json: { email, password, ...(mfaCode ? { mfaCode } : {}) }, publicEndpoint: true,
     });
+    if (res.mfaRequired) return res;
+    await applySession(res);
+    return res;
+  }
+
+  async function applySession(res: AuthResponse) {
+    if (!res.accessToken || !res.refreshToken) return;
     await setTokens(res.accessToken, res.refreshToken);
     await bootstrap();
-    return res;
   }
 
   async function register(input: { email: string; password?: string; name?: string; timezone?: string }) {
     const res = await apiFetch<AuthResponse>('/identity/register', {
       method: 'POST', json: input, publicEndpoint: true,
     });
-    await setTokens(res.accessToken, res.refreshToken);
-    await bootstrap();
+    await applySession(res);
     return res;
   }
 
@@ -97,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const tokens = await apiFetch<AuthResponse>('/identity/refresh', {
       method: 'POST', json: { refreshToken: r }, publicEndpoint: true,
     });
+    if (!tokens.accessToken || !tokens.refreshToken) throw new Error('Resposta de refresh invalida');
     await setTokens(tokens.accessToken, tokens.refreshToken);
     await bootstrap();
   }
@@ -112,7 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <Ctx.Provider value={{
       user, spaces, currentSpaceId, loading, loggedIn: !!user,
-      roleInCurrentSpace, login, register, logout, refresh, setCurrentSpace,
+      roleInCurrentSpace, login, register, applySession, logout, refresh, setCurrentSpace,
     }}>
       {children}
     </Ctx.Provider>

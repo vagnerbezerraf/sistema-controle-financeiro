@@ -10,32 +10,25 @@ rust-version = "1.77"
 tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
-tauri = { version = "2.0", features = [
+# Apenas features REAIS do crate `tauri`. Os identificadores de permissao
+# (dialog-open, fs-*, notification-all, os-all, shell-open, updater, ...) sao
+# declarados nas capabilities (src-tauri/capabilities/default.json), NAO aqui.
+#
+# As versoes (minor) abaixo devem casar com os pacotes npm `@tauri-apps/*`
+# instalados, senao o CLI do Tauri aborta o build por "version mismatch".
+# Usamos `~` (til) para fixar o minor — `^`/caret no Cargo libera o minor.
+# ATENCAO: o minor do crate `tauri` deve ser >= o das deps transitivas
+# `tauri-runtime`/`tauri-runtime-wry`, pois estas evoluem a API (ex.: tauri
+# 2.11 + tauri-runtime 2.12 = erro de compilacao). Mantemos tudo na linha 2.12+.
+tauri = { version = "~2.12", features = ["protocol-asset",
   "tray-icon",
   "image-png",
-  "dialog-open",
-  "dialog-save",
-  "fs-copy-file",
-  "fs-create-dir",
-  "fs-exists",
-  "fs-read-dir",
-  "fs-read-file",
-  "fs-remove-dir",
-  "fs-remove-file",
-  "fs-rename",
-  "fs-write-file",
-  "notification-all",
-  "os-all",
-  "shell-open",
-  "updater",
-  "window-all",
 ] }
-tauri-plugin-dialog = "2.0"
-tauri-plugin-fs = "2.0"
-tauri-plugin-notification = "2.0"
-tauri-plugin-os = "2.0"
-tauri-plugin-shell = "2.0"
-tauri-plugin-updater = "2.0"
+tauri-plugin-dialog = "~2.8"
+tauri-plugin-fs = "~2.7"
+tauri-plugin-notification = "~2.8"
+tauri-plugin-os = "~2.4"
+tauri-plugin-shell = "~2.6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
@@ -43,7 +36,6 @@ anyhow = "1"
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
-updater = ["tauri/updater", "tauri-plugin-updater"]
 
 [profile.release]
 panic = "abort"

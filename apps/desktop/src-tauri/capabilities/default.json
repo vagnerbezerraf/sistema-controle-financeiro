@@ -18,12 +18,11 @@
     "dialog:allow-ask",
     "fs:default",
     "fs:allow-copy-file",
-    "fs:allow-create-dir",
+    "fs:allow-mkdir",
     "fs:allow-exists",
     "fs:allow-read-dir",
     "fs:allow-read-file",
-    "fs:allow-remove-dir",
-    "fs:allow-remove-file",
+    "fs:allow-remove",
     "fs:allow-rename",
     "fs:allow-write-file",
     "notification:default",
@@ -35,9 +34,6 @@
     "os:allow-platform",
     "os:allow-version",
     "os:allow-locale",
-    "shell:allow-open",
-    "updater:default",
-    "updater:allow-check",
-    "updater:allow-download-and-install"
+    "shell:allow-open"
   ]
 }

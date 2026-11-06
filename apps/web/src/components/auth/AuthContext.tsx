@@ -11,8 +11,9 @@ interface AuthState {
   loading: boolean;
   loggedIn: boolean;
   roleInCurrentSpace: FinancialSpaceRole | null;
-  login: (email: string, password: string) => Promise<AuthResponse>;
+  login: (email: string, password: string, mfaCode?: string) => Promise<AuthResponse>;
   register: (input: { email: string; password?: string; name?: string; timezone?: string }) => Promise<AuthResponse>;
+  applySession: (res: AuthResponse) => Promise<void>;
   logout: () => void;
   refresh: () => Promise<void>;
   setCurrentSpace: (id: string) => void;
@@ -20,7 +21,16 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
-const PUBLIC_PATHS = ['/login', '/register', '/', '/docs', '/health'];
+const PUBLIC_PATHS = [
+  '/login',
+  '/register',
+  '/auth/callback',
+  '/forgot-password',
+  '/reset-password',
+  '/',
+  '/docs',
+  '/health',
+];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -74,26 +84,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               json: { refreshToken: refresh },
               publicEndpoint: true,
             });
+            if (!tokens.accessToken || !tokens.refreshToken) throw new Error('Refresh invalido');
             setAuth(tokens.accessToken, tokens.refreshToken);
             return bootstrap();
           }
-        } catch {}
+        } catch {
+          // Falha ao renovar a sessao: prossegue para limpeza das credenciais.
+        }
       }
       clearAuth();
       setUser(null);
     }
   }
 
-  async function login(email: string, password: string) {
+  async function login(email: string, password: string, mfaCode?: string) {
     const res = await apiFetch<AuthResponse>('/identity/login', {
       method: 'POST',
-      json: { email, password },
+      json: { email, password, ...(mfaCode ? { mfaCode } : {}) },
       publicEndpoint: true,
     });
+    if (res.mfaRequired) return res;
+    await applySession(res);
+    return res;
+  }
+
+  async function applySession(res: AuthResponse) {
+    if (!res.accessToken || !res.refreshToken) return;
     setAuth(res.accessToken, res.refreshToken);
     await bootstrap();
     router.push('/app/dashboard');
-    return res;
   }
 
   async function register(input: { email: string; password?: string; name?: string; timezone?: string }) {
@@ -102,9 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       json: input,
       publicEndpoint: true,
     });
-    setAuth(res.accessToken, res.refreshToken);
-    await bootstrap();
-    router.push('/app/dashboard');
+    await applySession(res);
     return res;
   }
 
@@ -124,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       json: { refreshToken },
       publicEndpoint: true,
     });
+    if (!res.accessToken || !res.refreshToken) throw new Error('Resposta de refresh invalida');
     setAuth(res.accessToken, res.refreshToken);
     await bootstrap();
   }
@@ -148,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     roleInCurrentSpace,
     login,
     register,
+    applySession,
     logout,
     refresh,
     setCurrentSpace,

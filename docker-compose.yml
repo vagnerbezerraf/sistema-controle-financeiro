@@ -50,9 +50,32 @@ services:
       - optional
       - full
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: scf-keycloak
+    restart: unless-stopped
+    # `start-dev` sobe o provedor com os defaults de desenvolvimento e importa o
+    # realm `scf` (clientes PKCE scf-web/scf-mobile/scf-desktop + usuario de teste).
+    command: ['start-dev', '--import-realm']
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HTTP_PORT: 8080
+      KC_HEALTH_ENABLED: 'true'
+      TZ: America/Sao_Paulo
+    ports:
+      - '${KEYCLOAK_PORT:-8080}:8080'
+    volumes:
+      - ./infra/containers/keycloak/realm-scf.json:/opt/keycloak/data/import/realm-scf.json:ro
+      - keycloak_data:/opt/keycloak/data
+    profiles:
+      - optional
+      - full
+
 volumes:
   postgres_data:
   redis_data:
+  keycloak_data:
 
 networks:
   default:

@@ -75,7 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={n.href}
                 href={n.href}
                 className={cls(
-                  'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-fast',
+                  'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition duration-fast',
                   active ? 'bg-brand-50 text-brand-700' : 'text-neutral-700 hover:bg-neutral-100',
                 )}
               >

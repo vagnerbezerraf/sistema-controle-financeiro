@@ -1,0 +1,78 @@
+{
+  "realm": "scf",
+  "enabled": true,
+  "displayName": "SCF - Sistema de Controle Financeiro",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "accessTokenLifespan": 3600,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "roles": {
+    "realm": [{ "name": "user", "description": "Usuario padrao do SCF" }]
+  },
+  "clients": [
+    {
+      "clientId": "scf-web",
+      "name": "SCF Web",
+      "description": "Cliente publico PKCE do app web",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "baseUrl": "http://localhost:3000",
+      "rootUrl": "http://localhost:3000",
+      "redirectUris": ["http://localhost:3000/auth/callback"],
+      "webOrigins": ["http://localhost:3000", "+"],
+      "attributes": { "pkce.code.challenge.method": "S256" }
+    },
+    {
+      "clientId": "scf-mobile",
+      "name": "SCF Mobile",
+      "description": "Cliente publico PKCE do app mobile (Expo)",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["scf-mobile://auth/callback", "exp://127.0.0.1:8081/--/auth/callback"],
+      "webOrigins": ["+", "scf-mobile://auth/callback"],
+      "attributes": { "pkce.code.challenge.method": "S256" }
+    },
+    {
+      "clientId": "scf-desktop",
+      "name": "SCF Desktop",
+      "description": "Cliente publico PKCE do app desktop (Tauri)",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["scf://auth/callback", "http://localhost:1420/auth/callback"],
+      "webOrigins": ["http://localhost:1420", "+"],
+      "attributes": { "pkce.code.challenge.method": "S256" }
+    }
+  ],
+  "users": [
+    {
+      "username": "sso@scf.local",
+      "email": "sso@scf.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Usuario",
+      "lastName": "SSO",
+      "credentials": [
+        { "type": "password", "value": "SsoForte123!", "temporary": false }
+      ],
+      "realmRoles": ["user"]
+    }
+  ]
+}

@@ -1,0 +1,153 @@
+name: scf-staging
+
+# Ambiente de homologacao (staging) completo: banco, cache, provedor de
+# identidade (Keycloak), API e Web. Sobe com:
+#   docker compose -f docker-compose.staging.yml up -d --build
+#
+# As credenciais abaixo sao apenas default de desenvolvimento. Em um ambiente
+# real, defina-as via variaveis de ambiente / secrets do orquestrador.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: scf-staging-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-scf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scf_staging_password}
+      POSTGRES_DB: ${POSTGRES_DB:-scf}
+      PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: America/Sao_Paulo
+    volumes:
+      - staging_postgres_data:/var/lib/postgresql/data
+      - ./infra/containers/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-scf} -d ${POSTGRES_DB:-scf}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: scf-staging-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes', '--requirepass', '${REDIS_PASSWORD:-scf_redis_secret}']
+    volumes:
+      - staging_redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '--pass', '${REDIS_PASSWORD:-scf_redis_secret}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: scf-staging-keycloak
+    restart: unless-stopped
+    command: ['start-dev', '--import-realm']
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HTTP_PORT: 8080
+      KC_HEALTH_ENABLED: 'true'
+      TZ: America/Sao_Paulo
+    ports:
+      - '${KEYCLOAK_PORT:-8080}:8080'
+    volumes:
+      - ./infra/containers/keycloak/realm-scf.json:/opt/keycloak/data/import/realm-scf.json:ro
+      - staging_keycloak_data:/opt/keycloak/data
+
+  # Aplica as migracoes do Prisma antes de subir a API.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    # O runner nao inclui os arquivos de workspace, entao usamos o script da
+    # propria app (WORKDIR = /app/apps/api) em vez de `pnpm --filter`.
+    command: ['pnpm', 'run', 'db:migrate:deploy']
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-scf}:${POSTGRES_PASSWORD:-scf_staging_password}@postgres:5432/${POSTGRES_DB:-scf}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: scf-staging-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      TZ: America/Sao_Paulo
+      DATABASE_URL: postgresql://${POSTGRES_USER:-scf}:${POSTGRES_PASSWORD:-scf_staging_password}@postgres:5432/${POSTGRES_DB:-scf}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-scf_redis_secret}
+      API_HOST: 0.0.0.0
+      API_PORT: 3001
+      API_CORS_ORIGIN: ${API_CORS_ORIGIN:-http://localhost:3000}
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:3001}
+      JWT_SECRET: ${JWT_SECRET:-troque-esta-chave-por-uma-segura-em-producao-com-pelo-menos-32-bytes}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-3600}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-1209600}
+      # O navegador acessa o Keycloak pelo host publico; a API o alcanca pelo
+      # hostname interno da rede do Compose (issuer interno).
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-http://localhost:8080/realms/scf}
+      OIDC_INTERNAL_ISSUER_URL: ${OIDC_INTERNAL_ISSUER_URL:-http://keycloak:8080/realms/scf}
+      OIDC_CLIENT_ID_WEB: ${OIDC_CLIENT_ID_WEB:-scf-web}
+      OIDC_CLIENT_ID_MOBILE: ${OIDC_CLIENT_ID_MOBILE:-scf-mobile}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-scf-desktop}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URI_WEB: ${OIDC_REDIRECT_URI_WEB:-http://localhost:3000/auth/callback}
+      OIDC_REDIRECT_URI_MOBILE: ${OIDC_REDIRECT_URI_MOBILE:-scf-mobile://auth/callback}
+      OIDC_REDIRECT_URI_DESKTOP: ${OIDC_REDIRECT_URI_DESKTOP:-scf://auth/callback}
+      OIDC_SCOPES: ${OIDC_SCOPES:-openid profile email}
+      MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      MAIL_HOST: ${MAIL_HOST:-localhost}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      MAIL_FROM: ${MAIL_FROM:-SCF <no-reply@scf.local>}
+      WEB_APP_URL: ${WEB_APP_URL:-http://localhost:3000}
+      PASSWORD_RESET_TTL_MINUTES: ${PASSWORD_RESET_TTL_MINUTES:-60}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+    ports:
+      - '${API_PORT:-3001}:3001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001/api/v1}
+    container_name: scf-staging-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      TZ: America/Sao_Paulo
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001/api/v1}
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  staging_postgres_data:
+  staging_redis_data:
+  staging_keycloak_data:
+
+networks:
+  default:
+    name: scf-staging-network

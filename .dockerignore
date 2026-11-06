@@ -1,0 +1,27 @@
+# Dependencias e artefatos de build (nunca vao para a imagem).
+**/node_modules
+**/.next
+**/dist
+**/build
+**/.turbo
+**/.expo
+**/.pnpm-store
+**/.pnpm-cache
+**/.pnpm-state
+**/*.log
+
+# Controle de versao e artefatos locais.
+.git
+.gitignore
+
+# Segredos e arquivos de ambiente locais (mantemos apenas os exemplos).
+**/.env
+**/.env.*
+!**/.env.example
+
+# Rust / Tauri (nao usados pelas imagens da api e do web).
+**/target
+**/src-tauri/target
+
+# Documentacao.
+doc

@@ -55,7 +55,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem('scf.access_token', tokens.accessToken);
             localStorage.setItem('scf.refresh_token', tokens.refreshToken);
             return bootstrap();
-          } catch {}
+          } catch {
+            // Falha ao renovar a sessao: prossegue para limpeza das credenciais.
+          }
         }
       }
       localStorage.removeItem('scf.access_token');

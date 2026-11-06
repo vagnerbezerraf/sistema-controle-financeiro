@@ -19,6 +19,7 @@ import {
   SpaceRoleGuard,
 } from '../common/auth/auth.guard';
 import { CreateTransactionRequest } from './http/dto';
+import { toDate } from '../common/utils/date';
 
 @ApiTags('transactions')
 @Controller('financial-spaces/:spaceId/transactions')
@@ -45,8 +46,8 @@ export class TransactionsController {
     const limit = Math.min(Number(limitParam ?? 50), 200);
     const where: any = { financialSpaceId: spaceId };
     if (from || to) where.effectiveDate = {};
-    if (from) where.effectiveDate.gte = from;
-    if (to) where.effectiveDate.lte = to;
+    if (from) where.effectiveDate.gte = toDate(from);
+    if (to) where.effectiveDate.lte = toDate(to);
     if (type) where.type = type;
     if (status) where.status = status;
     if (accountId) where.postings = { some: { accountId } };
@@ -100,8 +101,8 @@ export class TransactionsController {
           categoryId: body.categoryId,
           currency: body.currency ?? 'BRL',
           totalAmount: body.totalAmount,
-          effectiveDate: body.effectiveDate,
-          dueDate: body.dueDate,
+          effectiveDate: toDate(body.effectiveDate),
+          dueDate: body.dueDate ? toDate(body.dueDate) : undefined,
           tags: body.tags ?? [],
           idempotencyKey,
           postings: {
@@ -109,7 +110,7 @@ export class TransactionsController {
               accountId: p.accountId,
               amount: p.amount,
               direction: p.direction,
-              effectiveDate: p.effectiveDate ?? body.effectiveDate,
+              effectiveDate: toDate(p.effectiveDate ?? body.effectiveDate),
             })),
           },
         },
@@ -160,10 +161,16 @@ export class TransactionsController {
   async dashboard(@Param('spaceId') spaceId: string, @Query('month') monthParam?: string) {
     const month = monthParam ?? new Date().toISOString().slice(0, 7);
     const [yearPart, monthPart] = month.split('-').map(Number);
-    const start = new Date(Date.UTC(yearPart, (monthPart || 1) - 1, 1)).toISOString().slice(0, 10);
-    const end = new Date(Date.UTC(yearPart, (monthPart || 1), 0)).toISOString().slice(0, 10);
+    const startDate = new Date(Date.UTC(yearPart, (monthPart || 1) - 1, 1));
+    const endDate = new Date(Date.UTC(yearPart, monthPart || 1, 0));
+    const start = startDate.toISOString().slice(0, 10);
+    const end = endDate.toISOString().slice(0, 10);
 
-    const where = { financialSpaceId: spaceId, effectiveDate: { gte: start, lte: end }, status: { not: 'canceled' } } as const;
+    const where = {
+      financialSpaceId: spaceId,
+      effectiveDate: { gte: startDate, lte: endDate },
+      status: { not: 'canceled' },
+    } as const;
     const transactions = await this.prisma.transaction.findMany({ where, include: { postings: true } });
 
     let totalIncome = '0';
@@ -185,7 +192,7 @@ export class TransactionsController {
       where: {
         financialSpaceId: spaceId,
         status: { in: ['scheduled', 'pending'] },
-        dueDate: { gte: start, lte: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString().slice(0, 10) },
+        dueDate: { gte: startDate, lte: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30) },
       },
       take: 20,
       orderBy: [{ dueDate: 'asc' }],

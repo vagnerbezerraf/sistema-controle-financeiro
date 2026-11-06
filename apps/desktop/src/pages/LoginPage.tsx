@@ -59,13 +59,13 @@ export default function LoginPage() {
           <div className="mb-6">
             <div className="flex items-center gap-2 rounded-md bg-neutral-100 p-1 text-sm">
               <button
-                className={`flex-1 rounded px-3 py-1.5 transition-fast ${mode === 'login' ? 'bg-white shadow-sm font-medium' : 'text-neutral-600'}`}
+                className={`flex-1 rounded px-3 py-1.5 transition duration-fast ${mode === 'login' ? 'bg-white shadow-sm font-medium' : 'text-neutral-600'}`}
                 onClick={() => setMode('login')}
               >
                 Entrar
               </button>
               <button
-                className={`flex-1 rounded px-3 py-1.5 transition-fast ${mode === 'register' ? 'bg-white shadow-sm font-medium' : 'text-neutral-600'}`}
+                className={`flex-1 rounded px-3 py-1.5 transition duration-fast ${mode === 'register' ? 'bg-white shadow-sm font-medium' : 'text-neutral-600'}`}
                 onClick={() => setMode('register')}
               >
                 Criar conta

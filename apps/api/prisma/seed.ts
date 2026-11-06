@@ -53,7 +53,8 @@ async function seedUserAndSpace(prisma: PrismaClient) {
 
   const accCount = await prisma.account.count({ where: { financialSpaceId: spaceId } });
   if (accCount === 0) {
-    const today = new Date().toISOString().slice(0, 10);
+    // `initialBalanceDate` é DateTime (@db.Date): o Prisma exige um Date, não uma string ISO.
+    const today = new Date();
     await prisma.account.createMany({
       data: [
         {

@@ -10,10 +10,22 @@ export class HealthController {
   constructor(private readonly prisma: PrismaClient) {}
 
   @Get('health')
-  @Get('healthz')
   @ApiOperation({ summary: 'Verifica saude da API' })
   @HttpCode(HttpStatus.OK)
   async check() {
+    return this.buildStatus();
+  }
+
+  // Alias exigido por orquestradores/health checks (o Nest só registra um
+  // caminho por decorador, por isso `healthz` precisa do seu próprio handler).
+  @Get('healthz')
+  @ApiOperation({ summary: 'Alias de verificacao de saude da API' })
+  @HttpCode(HttpStatus.OK)
+  async checkAlias() {
+    return this.buildStatus();
+  }
+
+  private async buildStatus() {
     const services: Record<string, string> = {};
 
     try {

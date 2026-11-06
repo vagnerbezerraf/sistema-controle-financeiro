@@ -201,10 +201,12 @@ export interface DashboardSummary {
 }
 
 export interface AuthResponse {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
+  accessToken?: string;
+  refreshToken?: string;
+  expiresIn?: number;
   tokenType: 'Bearer' | string;
+  /** true quando a senha esta correta mas o segundo fator (MFA) precisa ser confirmado. */
+  mfaRequired?: boolean;
   user?: {
     id: string;
     email: string;

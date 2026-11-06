@@ -1,6 +1,9 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/@prisma/client/.prisma/client"
+  // Ponto resolvido pelo TypeScript via `@prisma/client` -> `.prisma/client`.
+  // Com pnpm hoisted, o `.prisma` efetivo fica em `apps/node_modules/.prisma`
+  // (compartilhado por api e worker); gerar em outro lugar deixa os tipos obsoletos.
+  output   = "../../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -94,11 +97,15 @@ model User {
   timezone        String       @default("America/Sao_Paulo")
   locale          String       @default("pt-BR")
   pictureUrl      String?
+  mfaSecret       String?
+  mfaEnabled      Boolean      @default(false)
+  mfaRecoveryCodes String[]    @default([])
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
   lastLoginAt     DateTime?
   memberships     Membership[]
   auditLogs       AuditLog[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
 }
@@ -405,4 +412,20 @@ model OutboxEvent {
 
   @@index([status, nextAttemptAt])
   @@map("outbox_events")
+}
+
+// Token de recuperacao de senha. Guardamos apenas o hash (SHA-256) do token;
+// o valor em claro so existe no e-mail enviado ao usuario.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
