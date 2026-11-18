@@ -15,6 +15,7 @@ export default function TransactionsPage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [q, setQ] = useState('');
+  const [tag, setTag] = useState('');
 
   const params = useMemo(() => {
     const sp = new URLSearchParams();
@@ -23,8 +24,9 @@ export default function TransactionsPage() {
     if (from) sp.set('from', from);
     if (to) sp.set('to', to);
     if (q) sp.set('q', q);
+    if (tag) sp.set('tag', tag);
     return sp.toString();
-  }, [type, status, from, to, q]);
+  }, [type, status, from, to, q, tag]);
 
   const transactionsQ = useQuery({
     queryKey: ['transactions', currentSpaceId, params],
@@ -61,7 +63,7 @@ export default function TransactionsPage() {
       </header>
 
       <section className="card">
-        <div className="card-body grid gap-3 md:grid-cols-5">
+        <div className="card-body grid gap-3 md:grid-cols-6">
           <div className="md:col-span-2">
             <label className="label block">Pesquisar</label>
             <div className="relative mt-1">
@@ -92,6 +94,15 @@ export default function TransactionsPage() {
             <label className="label block">Data final</label>
             <input type="date" className="input mt-1" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
+          <div>
+            <label className="label block">Etiqueta</label>
+            <input
+              className="input mt-1"
+              placeholder="Ex.: viagem"
+              value={tag}
+              onChange={(e) => setTag(e.target.value)}
+            />
+          </div>
         </div>
       </section>
 
@@ -121,6 +132,7 @@ export default function TransactionsPage() {
                 <th className="px-6 py-3 font-medium">Descricao</th>
                 <th className="px-6 py-3 font-medium">Data</th>
                 <th className="px-6 py-3 font-medium">Categoria</th>
+                <th className="px-6 py-3 font-medium">Etiquetas</th>
                 <th className="px-6 py-3 font-medium">Status</th>
                 <th className="px-6 py-3 text-right font-medium">Valor</th>
               </tr>
@@ -132,6 +144,7 @@ export default function TransactionsPage() {
                       <td className="px-6 py-4"><div className="h-4 w-2/3 animate-pulse rounded bg-neutral-100" /></td>
                       <td className="px-6 py-4"><div className="h-4 w-20 animate-pulse rounded bg-neutral-100" /></td>
                       <td className="px-6 py-4"><div className="h-4 w-24 animate-pulse rounded bg-neutral-100" /></td>
+                      <td className="px-6 py-4"><div className="h-4 w-16 animate-pulse rounded bg-neutral-100" /></td>
                       <td className="px-6 py-4"><div className="h-5 w-20 animate-pulse rounded bg-neutral-100" /></td>
                       <td className="px-6 py-4"><div className="ml-auto h-5 w-24 animate-pulse rounded bg-neutral-100" /></td>
                     </tr>
@@ -139,7 +152,7 @@ export default function TransactionsPage() {
                 : items.length === 0
                 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-10 text-center text-neutral-500">
+                      <td colSpan={6} className="px-6 py-10 text-center text-neutral-500">
                         Nenhum lancamento encontrado com os filtros aplicados.
                       </td>
                     </tr>
@@ -176,6 +189,25 @@ export default function TransactionsPage() {
                           ) : (
                             <span className="text-neutral-400">Sem categoria</span>
                           )}
+                        </td>
+                        <td className="px-6 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            {(t.tags ?? []).length === 0 ? (
+                              <span className="text-neutral-400">—</span>
+                            ) : (
+                              (t.tags ?? []).map((tg) => (
+                                <button
+                                  key={tg}
+                                  type="button"
+                                  onClick={() => setTag(tg)}
+                                  title={`Filtrar por ${tg}`}
+                                  className="badge border-neutral-200 bg-neutral-50 text-neutral-700 hover:bg-neutral-100"
+                                >
+                                  {tg}
+                                </button>
+                              ))
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-3">
                           <span className={`badge ${statusBadge(t.status)}`}>{t.status}</span>

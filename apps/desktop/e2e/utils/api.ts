@@ -37,6 +37,10 @@ export interface SeedOptions {
   expense?: string;
   incomeDescription?: string;
   expenseDescription?: string;
+  /** Etiquetas aplicadas a receita semeada. */
+  incomeTags?: string[];
+  /** Etiquetas aplicadas a despesa semeada. */
+  expenseTags?: string[];
 }
 
 async function request<T>(method: string, endpoint: string, options: { token?: string; json?: unknown } = {}): Promise<T> {
@@ -63,6 +67,7 @@ async function createTransaction(
     description: string;
     totalAmount: string;
     effectiveDate: string;
+    tags?: string[];
     postings: Array<{ accountId: string; amount: string; direction: 'debit' | 'credit' }>;
   },
 ): Promise<void> {
@@ -97,6 +102,7 @@ export async function seedUser(options: SeedOptions = {}): Promise<SeededUser> {
       description: options.incomeDescription ?? 'Salario E2E',
       totalAmount: options.income,
       effectiveDate: currentMonthDay(5),
+      tags: options.incomeTags,
       postings: [{ accountId, amount: options.income, direction: 'debit' }],
     });
   }
@@ -107,6 +113,7 @@ export async function seedUser(options: SeedOptions = {}): Promise<SeededUser> {
       description: options.expenseDescription ?? 'Aluguel E2E',
       totalAmount: options.expense,
       effectiveDate: currentMonthDay(10),
+      tags: options.expenseTags,
       postings: [{ accountId, amount: options.expense, direction: 'credit' }],
     });
   }

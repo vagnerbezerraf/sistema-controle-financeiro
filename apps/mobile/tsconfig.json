@@ -7,7 +7,9 @@
     "paths": {
       "@/*": ["./src/*"],
       "@api/*": ["../../packages/api-contracts/src/*"],
-      "@tokens/*": ["../../packages/design-tokens/src/*"]
+      "@tokens/*": ["../../packages/design-tokens/src/*"],
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"]
     },
     "allowJs": true,
     "jsx": "react-native",

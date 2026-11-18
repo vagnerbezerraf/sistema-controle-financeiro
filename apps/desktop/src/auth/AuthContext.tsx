@@ -19,6 +19,18 @@ interface AuthState {
 
 const Ctx = createContext<AuthState | undefined>(undefined);
 
+/**
+ * Persiste os tokens quando a resposta traz ambos (login, registro e renovacao).
+ * A resposta de login pode nao trazer tokens quando o MFA esta ativo; nesse caso
+ * nada e gravado e retornamos `false`.
+ */
+function persistTokens(res: AuthResponse): boolean {
+  if (!res.accessToken || !res.refreshToken) return false;
+  localStorage.setItem('scf.access_token', res.accessToken);
+  localStorage.setItem('scf.refresh_token', res.refreshToken);
+  return true;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const _location = useLocation();
@@ -52,9 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const tokens = await apiFetch<AuthResponse>('/identity/refresh', {
               method: 'POST', json: { refreshToken: refresh }, publicEndpoint: true,
             });
-            localStorage.setItem('scf.access_token', tokens.accessToken);
-            localStorage.setItem('scf.refresh_token', tokens.refreshToken);
-            return bootstrap();
+            if (persistTokens(tokens)) return bootstrap();
           } catch {
             // Falha ao renovar a sessao: prossegue para limpeza das credenciais.
           }
@@ -70,8 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const res = await apiFetch<AuthResponse>('/identity/login', {
       method: 'POST', json: { email, password }, publicEndpoint: true,
     });
-    localStorage.setItem('scf.access_token', res.accessToken);
-    localStorage.setItem('scf.refresh_token', res.refreshToken);
+    persistTokens(res);
     await bootstrap();
     navigate('/dashboard');
     return res;
@@ -81,8 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const res = await apiFetch<AuthResponse>('/identity/register', {
       method: 'POST', json: input, publicEndpoint: true,
     });
-    localStorage.setItem('scf.access_token', res.accessToken);
-    localStorage.setItem('scf.refresh_token', res.refreshToken);
+    persistTokens(res);
     await bootstrap();
     navigate('/dashboard');
     return res;
@@ -102,8 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const r = localStorage.getItem('scf.refresh_token');
     if (!r) throw new Error('Sem refresh token');
     const tokens = await apiFetch<AuthResponse>('/identity/refresh', { method: 'POST', json: { refreshToken: r }, publicEndpoint: true });
-    localStorage.setItem('scf.access_token', tokens.accessToken);
-    localStorage.setItem('scf.refresh_token', tokens.refreshToken);
+    persistTokens(tokens);
     await bootstrap();
   }
 

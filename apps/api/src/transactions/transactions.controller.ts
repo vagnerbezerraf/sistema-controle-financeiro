@@ -56,9 +56,10 @@ export class TransactionsController {
     @Query('accountId') accountId?: string,
     @Query('categoryId') categoryId?: string,
     @Query('q') q?: string,
+    @Query('tag') tag?: string,
   ) {
     const limit = Math.min(Number(limitParam ?? 50), 200);
-    const where = this.buildTransactionFilter(spaceId, { from, to, type, status, accountId, categoryId, q });
+    const where = this.buildTransactionFilter(spaceId, { from, to, type, status, accountId, categoryId, q, tag });
     if (cursor) where.id = { lt: cursor };
 
     const [items, total] = await Promise.all([
@@ -92,8 +93,9 @@ export class TransactionsController {
     @Query('accountId') accountId?: string,
     @Query('categoryId') categoryId?: string,
     @Query('q') q?: string,
+    @Query('tag') tag?: string,
   ): Promise<string> {
-    const where = this.buildTransactionFilter(spaceId, { from, to, type, status, accountId, categoryId, q });
+    const where = this.buildTransactionFilter(spaceId, { from, to, type, status, accountId, categoryId, q, tag });
     const items = await this.prisma.transaction.findMany({
       where,
       orderBy: [{ effectiveDate: 'desc' }, { createdAt: 'desc' }],
@@ -377,6 +379,7 @@ export class TransactionsController {
       accountId?: string;
       categoryId?: string;
       q?: string;
+      tag?: string;
     },
   ): Prisma.TransactionWhereInput {
     const where: Prisma.TransactionWhereInput = { financialSpaceId: spaceId };
@@ -390,6 +393,9 @@ export class TransactionsController {
     if (f.status) where.status = f.status as TransactionStatus;
     if (f.accountId) where.postings = { some: { accountId: f.accountId } };
     if (f.categoryId) where.categoryId = f.categoryId;
+    // Etiqueta e uma lista livre por transacao; `has` casa quando a etiqueta
+    // pesquisada esta presente no array.
+    if (f.tag) where.tags = { has: f.tag };
     if (f.q) {
       where.OR = [
         { description: { contains: f.q, mode: 'insensitive' } },

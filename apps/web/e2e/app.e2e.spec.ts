@@ -29,6 +29,28 @@ test.describe('Web · dashboard e lançamentos', () => {
     await expect(page.getByText('Aluguel E2E')).toBeVisible();
   });
 
+  test('exibe e filtra lançamentos por etiqueta', async ({ page }) => {
+    const user = await seedUser({
+      income: '1000.00',
+      incomeTags: ['viagem'],
+      expense: '250.50',
+      expenseTags: ['contas'],
+    });
+    await loginViaUi(page, user.email, user.password);
+    await page.goto('/app/transactions');
+
+    await expect(page.getByRole('heading', { name: 'Lancamentos' })).toBeVisible();
+    // As etiquetas aparecem como badges clicáveis na coluna "Etiquetas".
+    await expect(page.getByRole('button', { name: 'viagem' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'contas' })).toBeVisible();
+
+    // Filtra pela etiqueta da receita: apenas o lançamento marcado permanece.
+    await page.getByPlaceholder('Ex.: viagem').fill('viagem');
+    await expect(page.getByText('1 registros')).toBeVisible();
+    await expect(page.getByText('Salário E2E')).toBeVisible();
+    await expect(page.getByText('Aluguel E2E')).toHaveCount(0);
+  });
+
   test('exibe o espaço financeiro padrão do usuário na barra lateral', async ({ page }) => {
     const user = await seedUser();
     await loginViaUi(page, user.email, user.password);

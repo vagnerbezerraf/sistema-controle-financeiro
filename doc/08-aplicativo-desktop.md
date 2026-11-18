@@ -151,6 +151,50 @@ Tauri fornece empacotamento por plataforma e documenta a exigência de assinatur
 - preservar dados locais compatíveis e ter recuperação para falha de instalação;
 - impedir downgrade não autorizado que reintroduza vulnerabilidade ou esquema local incompatível.
 
+## Assinatura de release
+
+Esta seção documenta a estratégia de assinatura de código do desktop. A configuração efetiva só entra no CI quando o certificado existir; até lá, nada é adicionado ao pipeline de release.
+
+### Princípios
+
+- A assinatura é obrigatória para distribuição fora do ambiente de desenvolvimento.
+- Nenhuma chave, senha ou certificado é versionado no repositório.
+- Segredos de assinatura vivem apenas no cofre do CI/CD e são injetados em tempo de build.
+- O artefato publicado (instalador, binário e pacote de atualização) é assinado; o atualizador verifica a assinatura antes de instalar.
+- A assinatura é feita no job nativo do sistema operacional correspondente, nunca em cross-compilação.
+
+### Windows (Authenticode)
+
+- Formato: certificado de assinatura de código Authenticode (`signtool`), em EV ou OV conforme a política de confiança escolhida.
+- Campos do `tauri.conf.json` a preencher quando o certificado existir: `bundle.windows.certificateThumbprint`, `bundle.windows.digestAlgorithm` (`sha256`) e `bundle.windows.timestampUrl`.
+- Carimbo de tempo (timestamp) obrigatório, para que a assinatura continue válida após o vencimento do certificado.
+- No CI, o certificado é importado no store do runner a partir de um segredo (arquivo `.pfx` em base64 + senha), usando a thumbprint como referência.
+- Instaladores cobertos: MSI e/ou NSIS, conforme a escolha de artefato.
+
+### macOS (Developer ID + notarização)
+
+- Assinatura com certificado `Developer ID Application`; preencher `bundle.macOS.signingIdentity`.
+- Notarização obrigatória: o app é enviado ao serviço da Apple (`notarytool`) com `bundle.macOS.entitlements` definido, e o resultado é grampeado (`stapler`) no artefato.
+- Segredos no CI: certificado `.p12` em base64 + senha, e credenciais da Apple (Apple ID + senha de app, ou chave de API `App Store Connect`).
+- Requer `hardened runtime` habilitado e entitlements mínimos.
+
+### Linux
+
+- Sem assinatura Authenticode/notarização nativa.
+- Publicar soma de verificação (SHA-256) junto de cada artefato e, quando houver repositório próprio, assinar os metadados do pacote com GPG.
+
+### Atualizações
+
+- O pacote de atualização é assinado com par de chaves própria do Tauri (`tauri signer`), independente do certificado de código.
+- A chave pública fica na configuração do app; a privada, apenas no CI/CD.
+- O atualizador rejeita pacote com assinatura inválida, adulterado ou de canal errado.
+
+### Titularidade e rotação
+
+- Titular: a assinatura usa o certificado emitido para a entidade responsável pelo produto, não uma conta pessoal de desenvolvedor.
+- Rotação: renovação antes do vencimento; para o Windows, o novo certificado exige uma nova importação no CI e nova `certificateThumbprint`. Para o macOS, novo `.p12` e reprovisionamento dos segredos.
+- Todo item de "Decisões pendentes" relacionado a assinatura só muda de estado quando houver o certificado e o primeiro release assinado publicado.
+
 ## Online e offline
 
 ### MVP
@@ -215,4 +259,4 @@ Também devem ser testados:
 - Definir se atualização será automática, assistida ou obrigatória em correções críticas.
 - Definir o nível de operação offline necessário.
 - Confirmar se bandeja do sistema, múltiplas janelas e inicialização automática entregam valor real.
-- Definir certificados, titularidade, rotação e processo de assinatura.
+- Adquirir o certificado de assinatura (Windows Authenticode e macOS Developer ID) e aplicá-lo ao pipeline seguindo a seção "Assinatura de release".

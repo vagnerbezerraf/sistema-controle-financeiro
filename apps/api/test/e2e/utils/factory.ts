@@ -85,6 +85,7 @@ export interface TransactionBody {
   status?: string;
   dueDate?: string;
   categoryId?: string;
+  tags?: string[];
   postings: Array<{ accountId: string; amount: string; direction: 'debit' | 'credit' }>;
 }
 

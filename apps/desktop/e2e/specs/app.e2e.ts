@@ -1,4 +1,4 @@
-import { $, expect } from '@wdio/globals';
+import { $, $$, browser, expect } from '@wdio/globals';
 import { seedUser } from '../utils/api';
 import { clickNav, login, resetApp } from '../utils/ui';
 
@@ -32,6 +32,31 @@ describe('Desktop · dashboard e navegacao', () => {
 
     await clickNav('Dashboard');
     await expect(await $('h1')).toHaveText('Dashboard');
+  });
+
+  it('exibe e filtra lancamentos por etiqueta', async () => {
+    const user = await seedUser({
+      income: '1000.00',
+      incomeTags: ['viagem'],
+      expense: '250.50',
+      expenseTags: ['contas'],
+    });
+    await resetApp();
+    await login(user.email, user.password);
+
+    await clickNav('Lancamentos');
+    await expect(await $('h1')).toHaveText('Lancamentos');
+
+    const body = await $('body');
+    await expect(body).toHaveText(expect.stringContaining('viagem'));
+    await expect(body).toHaveText(expect.stringContaining('contas'));
+
+    // Filtra pela etiqueta da receita: so o lancamento marcado permanece.
+    await (await $('#filtro-etiqueta')).setValue('viagem');
+    await browser.waitUntil(async () => (await $$('tbody tr')).length === 1, { timeout: 20_000 });
+    const rows = await $$('tbody tr');
+    await expect(rows[0]).toHaveText(expect.stringContaining('Salario E2E'));
+    await expect(rows[0]).not.toHaveText(expect.stringContaining('Aluguel E2E'));
   });
 
   it('encerra a sessao e volta para o login', async () => {

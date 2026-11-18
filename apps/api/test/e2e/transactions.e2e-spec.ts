@@ -706,4 +706,69 @@ describe('E2E | Transações: criação, consistência de movimentos, idempotên
 
     expect(res.status).toBe(403);
   });
+
+  it('filtra a listagem e a exportação por etiqueta', async () => {
+    const user = await bootstrapUser(app);
+    const conta = await createAccount(app, user.accessToken, user.spaceId);
+
+    await createTransaction(app, user.accessToken, user.spaceId, {
+      type: 'expense',
+      description: 'Hotel',
+      totalAmount: '800.00',
+      effectiveDate: `${MES}-05`,
+      tags: ['viagem', 'ferias'],
+      postings: [{ accountId: conta.id, amount: '800.00', direction: 'credit' }],
+    }).expect(201);
+
+    await createTransaction(app, user.accessToken, user.spaceId, {
+      type: 'expense',
+      description: 'Passagem',
+      totalAmount: '400.00',
+      effectiveDate: `${MES}-06`,
+      tags: ['viagem'],
+      postings: [{ accountId: conta.id, amount: '400.00', direction: 'credit' }],
+    }).expect(201);
+
+    await createTransaction(app, user.accessToken, user.spaceId, {
+      type: 'expense',
+      description: 'Mercado',
+      totalAmount: '100.00',
+      effectiveDate: `${MES}-07`,
+      postings: [{ accountId: conta.id, amount: '100.00', direction: 'credit' }],
+    }).expect(201);
+
+    // Sem filtro, as três aparecem.
+    const todas = await api(app)
+      .get(`/api/v1/financial-spaces/${user.spaceId}/transactions`)
+      .set(auth(user.accessToken));
+    expect(todas.body.total).toBe(3);
+
+    // Somente as marcadas com "viagem".
+    const viagem = await api(app)
+      .get(`/api/v1/financial-spaces/${user.spaceId}/transactions?tag=viagem`)
+      .set(auth(user.accessToken));
+    expect(viagem.body.total).toBe(2);
+    expect(
+      viagem.body.items
+        .map((t: { description: string }) => t.description)
+        .sort(),
+    ).toEqual(['Hotel', 'Passagem']);
+    expect(viagem.body.items.every((t: { tags: string[] }) => t.tags.includes('viagem'))).toBe(true);
+
+    // Etiqueta sem correspondência não retorna nada.
+    const nenhuma = await api(app)
+      .get(`/api/v1/financial-spaces/${user.spaceId}/transactions?tag=inexistente`)
+      .set(auth(user.accessToken));
+    expect(nenhuma.body.total).toBe(0);
+
+    // A exportação reaproveita o mesmo filtro.
+    const csv = await api(app)
+      .get(`/api/v1/financial-spaces/${user.spaceId}/transactions/export?tag=viagem`)
+      .set(auth(user.accessToken));
+    const linhas = csv.text.replace('\uFEFF', '').trim().split('\r\n');
+    expect(linhas).toHaveLength(3); // cabeçalho + 2 registros
+    expect(linhas.some((l: string) => l.includes('Hotel'))).toBe(true);
+    expect(linhas.some((l: string) => l.includes('Passagem'))).toBe(true);
+    expect(linhas.some((l: string) => l.includes('Mercado'))).toBe(false);
+  });
 });
