@@ -68,6 +68,7 @@ function currentTitle(pathname: string) {
     case '/dashboard': return 'Dashboard';
     case '/transactions': return 'Lancamentos';
     case '/accounts': return 'Contas';
+    case '/cards': return 'Cartoes e faturas';
     default: return 'SCF Desktop';
   }
 }

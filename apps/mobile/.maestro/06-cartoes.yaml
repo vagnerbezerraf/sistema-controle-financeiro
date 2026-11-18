@@ -1,0 +1,32 @@
+appId: host.exp.exponent
+---
+- openLink: "exp://10.0.2.2:8081"
+- runFlow: scripts/ensure-logged-in.yaml
+
+# Abre a aba de cartoes e cria um cartao
+- tapOn:
+    id: "tab-cartoes"
+- extendedWaitUntil:
+    visible: "Compras por ciclo de fechamento."
+    timeout: 20000
+- assertVisible: "Cartoes e faturas"
+
+- tapOn:
+    id: "novo-cartao"
+- tapOn:
+    id: "cartao-nome"
+- inputText: "Cartao E2E"
+- hideKeyboard
+- tapOn:
+    id: "cartao-salvar"
+
+# O cartao recem-criado aparece na lista
+- extendedWaitUntil:
+    visible: "Cartao E2E"
+    timeout: 20000
+
+- tapOn:
+    id: "tab-dashboard"
+- extendedWaitUntil:
+    visible: "Resumo do mes atual."
+    timeout: 20000

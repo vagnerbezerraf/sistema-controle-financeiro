@@ -38,6 +38,9 @@ export interface SeededUser {
   accessToken: string;
   spaceId: string;
   accountId: string;
+  cardId?: string;
+  cardName?: string;
+  cardAccountId?: string;
 }
 
 export interface SeedOptions {
@@ -51,6 +54,10 @@ export interface SeedOptions {
   incomeTags?: string[];
   /** Etiquetas aplicadas à despesa semeada. */
   expenseTags?: string[];
+  /** Cartão de crédito criado no espaço financeiro. */
+  creditCard?: { name: string; limit?: string; closingDay?: number; dueDay?: number };
+  /** Compra lançada na conta técnica do cartão (exige `creditCard`). */
+  purchase?: string;
 }
 
 interface TransactionBody {
@@ -128,7 +135,48 @@ export async function seedUser(options: SeedOptions = {}): Promise<SeededUser> {
       });
     }
 
-    return { email, password: TEST_PASSWORD, accessToken: token, spaceId, accountId };
+    let cardId: string | undefined;
+    let cardName: string | undefined;
+    let cardAccountId: string | undefined;
+    if (options.creditCard) {
+      const cardRes = await api.post(`${API_PREFIX}/financial-spaces/${spaceId}/credit-cards`, {
+        headers,
+        data: {
+          name: options.creditCard.name,
+          limit: options.creditCard.limit ?? '5000.00',
+          closingDay: options.creditCard.closingDay ?? 25,
+          dueDay: options.creditCard.dueDay ?? 5,
+        },
+      });
+      if (cardRes.status() !== 201) {
+        throw new Error(`Falha ao criar cartão (HTTP ${cardRes.status()}): ${await cardRes.text()}`);
+      }
+      const card = (await cardRes.json()) as { id: string; name: string; accountId: string };
+      cardId = card.id;
+      cardName = card.name;
+      cardAccountId = card.accountId;
+
+      if (options.purchase) {
+        await createTransaction(api, spaceId, token, {
+          type: 'expense',
+          description: 'Compra cartão E2E',
+          totalAmount: options.purchase,
+          effectiveDate: currentMonthDay(5),
+          postings: [{ accountId: card.accountId, amount: options.purchase, direction: 'credit' }],
+        });
+      }
+    }
+
+    return {
+      email,
+      password: TEST_PASSWORD,
+      accessToken: token,
+      spaceId,
+      accountId,
+      cardId,
+      cardName,
+      cardAccountId,
+    };
   } finally {
     await api.dispose();
   }
