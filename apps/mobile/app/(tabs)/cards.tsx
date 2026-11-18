@@ -3,7 +3,13 @@ import { View, Text, ScrollView, TextInput, Pressable, RefreshControl } from 're
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/auth/AuthContext';
 import { apiFetch } from '../../src/lib/api';
-import type { Account, CreditCard, Invoice, InvoiceStatus } from '@scf/api-contracts';
+import type {
+  Account,
+  CreditCard,
+  Invoice,
+  InvoiceStatus,
+  PurchaseInstallmentsRequest,
+} from '@scf/api-contracts';
 import { CreditCard as CreditCardIcon, Plus, X } from 'lucide-react-native';
 
 function formatCurrency(n: string | number) {
@@ -66,6 +72,7 @@ export default function CardsScreen() {
   const payAccounts = (accountsQ.data ?? []).filter((a) => a.id !== selected?.accountId);
 
   const [showCreate, setShowCreate] = useState(false);
+  const [showPurchase, setShowPurchase] = useState(false);
   const [payingId, setPayingId] = useState<string | null>(null);
   const [payAccount, setPayAccount] = useState('');
   const [payAmount, setPayAmount] = useState('');
@@ -185,7 +192,31 @@ export default function CardsScreen() {
           <View className="border-b border-neutral-100 p-4">
             <Text className="text-base font-semibold text-neutral-900">Faturas · {selected.name}</Text>
             <Text className="text-xs text-neutral-500 mt-0.5">Mais recente primeiro</Text>
+            <Text className="mt-2 text-xs text-neutral-500">
+              Lance uma compra; em varias parcelas, cada uma cai na fatura da sua competencia.
+            </Text>
+            <Pressable
+              testID="nova-compra"
+              onPress={() => setShowPurchase((v) => !v)}
+              className={`mt-3 flex-row items-center justify-center gap-1 rounded-lg px-3 py-2 ${showPurchase ? 'border border-neutral-300 bg-white' : 'bg-brand-600'}`}
+            >
+              {showPurchase ? <X size={16} color="#0f172a" /> : <Plus size={16} color="white" />}
+              <Text className={`text-sm font-medium ${showPurchase ? 'text-neutral-900' : 'text-white'}`}>
+                {showPurchase ? 'Cancelar' : 'Nova compra'}
+              </Text>
+            </Pressable>
           </View>
+
+          {showPurchase && (
+            <PurchaseForm
+              spaceId={currentSpaceId}
+              cardId={selected.id}
+              onCreated={async () => {
+                setShowPurchase(false);
+                await qc.invalidateQueries({ queryKey: ['invoices', currentSpaceId, selected.id] });
+              }}
+            />
+          )}
 
           {payingInvoice && (
             <View className="border-b border-neutral-100 bg-neutral-50 p-4">
@@ -381,6 +412,120 @@ function CreateCardForm({ spaceId, onCreated }: { spaceId: string | null; onCrea
       >
         <Text className="text-center text-sm font-medium text-white">
           {busy ? 'Criando...' : 'Criar cartao'}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function PurchaseForm({
+  spaceId,
+  cardId,
+  onCreated,
+}: {
+  spaceId: string | null;
+  cardId: string;
+  onCreated: () => void;
+}) {
+  const [description, setDescription] = useState('');
+  const [totalAmount, setTotalAmount] = useState('');
+  const [installments, setInstallments] = useState('1');
+  const [purchaseDate, setPurchaseDate] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const parcelas = Number(installments);
+  const preview =
+    totalAmount.trim() && parcelas >= 2 ? `~${formatCurrency(Number(totalAmount) / parcelas)} por mes` : null;
+
+  async function submit() {
+    if (!spaceId || !description.trim() || !totalAmount.trim()) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const body: PurchaseInstallmentsRequest = {
+        description: description.trim(),
+        totalAmount: totalAmount.trim(),
+        installments: parcelas,
+        ...(purchaseDate.trim() ? { purchaseDate: purchaseDate.trim() } : {}),
+      };
+      await apiFetch(`/financial-spaces/${spaceId}/credit-cards/${cardId}/purchases`, {
+        method: 'POST',
+        json: body,
+      });
+      setDescription('');
+      setTotalAmount('');
+      setInstallments('1');
+      setPurchaseDate('');
+      onCreated();
+    } catch (e: any) {
+      setError(e?.details?.message ?? e?.message ?? 'Nao foi possivel lancar a compra');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <View className="border-b border-neutral-100 bg-neutral-50 p-4">
+      {error && (
+        <Text className="mb-3 rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">{error}</Text>
+      )}
+
+      <Text className="text-xs font-medium text-neutral-700">Descricao</Text>
+      <TextInput
+        testID="compra-descricao"
+        className="mt-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-neutral-900"
+        placeholder="Ex.: Notebook Dell"
+        placeholderTextColor="#94a3b8"
+        value={description}
+        onChangeText={setDescription}
+      />
+
+      <Text className="mt-3 text-xs font-medium text-neutral-700">Valor total</Text>
+      <TextInput
+        testID="compra-valor"
+        className="mt-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-neutral-900"
+        placeholder="Ex.: 3000.00"
+        placeholderTextColor="#94a3b8"
+        keyboardType="decimal-pad"
+        value={totalAmount}
+        onChangeText={setTotalAmount}
+      />
+
+      <View className="mt-3 flex-row gap-3">
+        <View className="flex-1">
+          <Text className="text-xs font-medium text-neutral-700">Parcelas</Text>
+          <TextInput
+            testID="compra-parcelas"
+            className="mt-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-neutral-900"
+            keyboardType="number-pad"
+            value={installments}
+            onChangeText={setInstallments}
+          />
+        </View>
+        <View className="flex-1">
+          <Text className="text-xs font-medium text-neutral-700">Data (opcional)</Text>
+          <TextInput
+            testID="compra-data"
+            className="mt-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-neutral-900"
+            placeholder="AAAA-MM-DD"
+            placeholderTextColor="#94a3b8"
+            value={purchaseDate}
+            onChangeText={setPurchaseDate}
+          />
+        </View>
+      </View>
+
+      {preview && <Text className="mt-2 text-xs text-neutral-500">{preview}</Text>}
+
+      <Pressable
+        testID="compra-salvar"
+        disabled={busy || !description.trim() || !totalAmount.trim()}
+        onPress={submit}
+        className={`mt-4 rounded-lg bg-brand-600 px-4 py-2.5 ${busy || !description.trim() || !totalAmount.trim() ? 'opacity-50' : ''}`}
+      >
+        <Text className="text-center text-sm font-medium text-white">
+          {busy ? 'Lancando...' : 'Lancar compra'}
         </Text>
       </Pressable>
     </View>

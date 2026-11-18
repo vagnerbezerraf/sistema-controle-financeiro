@@ -25,6 +25,30 @@ appId: host.exp.exponent
     visible: "Cartao E2E"
     timeout: 20000
 
+# Lanca uma compra parcelada; cada parcela cai na fatura da sua competencia
+- tapOn:
+    id: "nova-compra"
+- tapOn:
+    id: "compra-descricao"
+- inputText: "Notebook E2E"
+- hideKeyboard
+- tapOn:
+    id: "compra-valor"
+- inputText: "3000.00"
+- hideKeyboard
+- tapOn:
+    id: "compra-parcelas"
+- eraseText
+- inputText: "3"
+- hideKeyboard
+- tapOn:
+    id: "compra-salvar"
+
+# As faturas geradas mostram o valor de cada parcela (R$ 1000,00)
+- extendedWaitUntil:
+    visible: ".*1000,00.*"
+    timeout: 20000
+
 - tapOn:
     id: "tab-dashboard"
 - extendedWaitUntil:

@@ -230,6 +230,12 @@ model Transaction {
   reversalReason          String?
   reversalOfTransactionId String?              @unique
 
+  // Compra parcelada: as N transacoes de uma mesma compra compartilham o
+  // `installmentGroupId`; `installmentNumber` vai de 1 a `installmentCount`.
+  installmentGroupId String?
+  installmentNumber  Int?
+  installmentCount   Int?
+
   financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
   category       Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   postings       Posting[]
@@ -240,6 +246,7 @@ model Transaction {
   @@unique([financialSpaceId, idempotencyKey])
   @@index([financialSpaceId, effectiveDate, status, type])
   @@index([financialSpaceId, categoryId])
+  @@index([installmentGroupId])
   @@map("transactions")
 }
 

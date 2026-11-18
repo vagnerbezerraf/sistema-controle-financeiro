@@ -42,4 +42,26 @@ test.describe('Web · cartões e faturas', () => {
     await expect(fatura).toContainText('Paga');
     await expect(fatura).toContainText('aberto R$ 0,00');
   });
+
+  test('lanca uma compra parcelada e distribui uma parcela por fatura', async ({ page }) => {
+    const user = await seedUser({
+      creditCard: { name: 'Cartao Parcela E2E', closingDay: 25, dueDay: 5 },
+    });
+    await loginViaUi(page, user.email, user.password);
+    await page.goto('/app/cards');
+
+    await expect(page.getByTestId('cartao-Cartao Parcela E2E')).toBeVisible();
+
+    await page.getByTestId('nova-compra').click();
+    await page.getByTestId('compra-descricao').fill('Notebook E2E');
+    await page.getByTestId('compra-valor').fill('3000.00');
+    await page.getByTestId('compra-parcelas').fill('3');
+    await page.getByTestId('compra-salvar').click();
+
+    // Cada parcela cai na fatura da sua competencia: 3 faturas de R$ 1.000,00.
+    const faturas = page.getByTestId(/^fatura-\d{4}-\d{2}-\d{2}$/);
+    await expect(faturas).toHaveCount(3);
+    await expect(faturas.first()).toContainText('1.000,00');
+    await expect(faturas.last()).toContainText('1.000,00');
+  });
 });

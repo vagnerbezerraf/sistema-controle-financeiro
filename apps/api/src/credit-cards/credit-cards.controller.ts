@@ -10,8 +10,9 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Account, CreditCard, PrismaClient } from '@prisma/client';
+import { Account, CreditCard, PrismaClient, Transaction } from '@prisma/client';
 import {
   CurrentUser,
   JwtAuthGuard,
@@ -21,8 +22,14 @@ import {
 } from '../common/auth/auth.guard';
 import { toDate } from '../common/utils/date';
 import { updateWithOptimisticLock } from '../common/utils/optimistic-lock';
-import { CreateCreditCardRequest, PayInvoiceRequest, UpdateCreditCardRequest } from './http/dto';
+import {
+  CreateCreditCardRequest,
+  PayInvoiceRequest,
+  PurchaseInstallmentsRequest,
+  UpdateCreditCardRequest,
+} from './http/dto';
 import { assembleInvoices, type InvoicePosting, type InvoiceView } from './domain/invoice-aggregation';
+import { installmentDates, installmentDescription, splitInstallments } from './domain/installments';
 
 type CreditCardWithAccount = CreditCard & { account: Account };
 
@@ -281,6 +288,112 @@ export class CreditCardsController {
       });
 
       return trx;
+    });
+  }
+
+  @Post(':cardId/purchases')
+  @Roles(['owner', 'admin', 'contributor'])
+  @ApiOperation({ summary: 'Lancar compra no cartao, opcionalmente parcelada (N parcelas mensais)' })
+  async purchase(
+    @Param('spaceId') spaceId: string,
+    @Param('cardId') cardId: string,
+    @Body() body: PurchaseInstallmentsRequest,
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const card = await this.findOne(spaceId, cardId);
+    if (!card) throw new NotFoundException('Cartao nao encontrado');
+
+    const totalCents = Math.round(Number(body.totalAmount) * 100);
+    if (!Number.isFinite(totalCents) || totalCents <= 0) {
+      throw new BadRequestException({
+        code: 'INVALID_AMOUNT',
+        message: 'O valor da compra deve ser positivo',
+      });
+    }
+
+    if (idempotencyKey) {
+      const existing = await this.prisma.idempotencyRecord.findUnique({
+        where: { financialSpaceId_idempotencyKey: { financialSpaceId: spaceId, idempotencyKey } },
+      });
+      if (existing) return existing.responsePayload;
+    }
+
+    // A compra vira N transacoes (uma por parcela), cada uma caindo no ciclo da
+    // sua competencia. A soma das parcelas e exatamente o total da compra
+    // (divisao em centavos) e a ultima parcela nunca "escorrega" de mes.
+    const purchaseDate = toDate(body.purchaseDate ?? new Date().toISOString().slice(0, 10));
+    const amounts = splitInstallments(totalCents, body.installments);
+    const dates = installmentDates(purchaseDate, body.installments);
+    const groupId = randomUUID();
+    const isInstallment = body.installments > 1;
+
+    return this.prisma.$transaction(async (tx) => {
+      const created: Transaction[] = [];
+      for (let index = 0; index < amounts.length; index += 1) {
+        const amount = (amounts[index] / 100).toFixed(2);
+        const trx = await tx.transaction.create({
+          data: {
+            financialSpaceId: spaceId,
+            type: 'expense',
+            status: 'confirmed',
+            description: installmentDescription(body.description, index + 1, body.installments),
+            categoryId: body.categoryId,
+            currency: card.account.currency,
+            totalAmount: amount,
+            effectiveDate: dates[index],
+            tags: body.tags ?? [],
+            installmentGroupId: isInstallment ? groupId : null,
+            installmentNumber: isInstallment ? index + 1 : null,
+            installmentCount: isInstallment ? body.installments : null,
+            postings: {
+              create: [
+                { accountId: card.accountId, amount, direction: 'credit', effectiveDate: dates[index] },
+              ],
+            },
+          },
+        });
+        created.push(trx);
+      }
+
+      const payload = {
+        installmentGroupId: isInstallment ? groupId : null,
+        installments: body.installments,
+        totalAmount: (totalCents / 100).toFixed(2),
+        purchaseDate: dates[0].toISOString().slice(0, 10),
+        transactions: created,
+      };
+
+      if (idempotencyKey) {
+        await tx.idempotencyRecord.create({
+          data: {
+            financialSpaceId: spaceId,
+            idempotencyKey,
+            requestFingerprint: JSON.stringify({ cardId, ...body }).slice(0, 512),
+            responsePayload: payload as any,
+            expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
+          },
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          financialSpaceId: spaceId,
+          userId: user.sub,
+          operation: 'installment.purchase',
+          entityType: 'CreditCard',
+          entityId: card.id,
+          safeSummary: {
+            description: body.description,
+            totalAmount: payload.totalAmount,
+            installments: body.installments,
+            installmentGroupId: payload.installmentGroupId,
+            transactionIds: created.map((t) => t.id),
+          },
+        },
+      });
+
+      return payload;
     });
   }
 

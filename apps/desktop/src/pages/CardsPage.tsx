@@ -4,7 +4,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { apiFetch } from '../lib/api';
 import { formatCurrency, formatDate, cls } from '../lib/format';
-import type { Account, CreditCard, Invoice, InvoiceStatus, CreateCreditCardRequest } from '@scf/api-contracts';
+import type {
+  Account,
+  CreditCard,
+  Invoice,
+  InvoiceStatus,
+  CreateCreditCardRequest,
+  PurchaseInstallmentsRequest,
+} from '@scf/api-contracts';
 import { CreditCard as CreditCardIcon, Plus, X } from 'lucide-react';
 
 export default function CardsPage() {
@@ -42,6 +49,7 @@ export default function CardsPage() {
   const payAccounts = (accountsQ.data ?? []).filter((a) => a.id !== selected?.accountId);
 
   const [showCreate, setShowCreate] = useState(false);
+  const [showPurchase, setShowPurchase] = useState(false);
   const [payingId, setPayingId] = useState<string | null>(null);
   const [payAccount, setPayAccount] = useState('');
   const [payAmount, setPayAmount] = useState('');
@@ -165,6 +173,34 @@ export default function CardsPage() {
             <p className="card-subtitle">Mais recente primeiro</p>
           </div>
           <div className="card-body">
+            {selected && (
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <p className="text-sm text-neutral-500">
+                  Lance uma compra; em varias parcelas, cada uma cai na fatura da sua competencia.
+                </p>
+                <button
+                  type="button"
+                  className={showPurchase ? 'btn-outline' : 'btn-primary'}
+                  id="nova-compra"
+                  onClick={() => setShowPurchase((v) => !v)}
+                >
+                  {showPurchase ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                  {showPurchase ? 'Cancelar' : 'Nova compra'}
+                </button>
+              </div>
+            )}
+
+            {showPurchase && selected && (
+              <PurchaseForm
+                spaceId={currentSpaceId}
+                cardId={selected.id}
+                onCreated={async () => {
+                  setShowPurchase(false);
+                  await qc.invalidateQueries({ queryKey: ['invoices', currentSpaceId, selected.id] });
+                }}
+              />
+            )}
+
             {!selected && <p className="text-sm text-neutral-500">Selecione um cartao.</p>}
             {selected && invoicesQ.isLoading && (
               <p className="text-sm text-neutral-500">Carregando faturas...</p>
@@ -416,6 +452,128 @@ function CreateCardForm({ spaceId, onCreated }: { spaceId: string | null; onCrea
         </button>
       </form>
     </section>
+  );
+}
+
+function PurchaseForm({
+  spaceId,
+  cardId,
+  onCreated,
+}: {
+  spaceId: string | null;
+  cardId: string;
+  onCreated: () => void;
+}) {
+  const [description, setDescription] = useState('');
+  const [totalAmount, setTotalAmount] = useState('');
+  const [installments, setInstallments] = useState('1');
+  const [purchaseDate, setPurchaseDate] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const parcelas = Number(installments);
+  const preview =
+    totalAmount.trim() && parcelas >= 2 ? `~${formatCurrency(Number(totalAmount) / parcelas)} por mes` : null;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!spaceId) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const body: PurchaseInstallmentsRequest = {
+        description: description.trim(),
+        totalAmount: totalAmount.trim(),
+        installments: parcelas,
+        ...(purchaseDate.trim() ? { purchaseDate: purchaseDate.trim() } : {}),
+      };
+      await apiFetch(`/financial-spaces/${spaceId}/credit-cards/${cardId}/purchases`, {
+        method: 'POST',
+        json: body,
+      });
+      setDescription('');
+      setTotalAmount('');
+      setInstallments('1');
+      setPurchaseDate('');
+      onCreated();
+    } catch (e: any) {
+      setError(e?.details?.message ?? e?.message ?? 'Nao foi possivel lancar a compra');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form
+      className="mb-4 space-y-3 rounded-md border border-neutral-200 bg-neutral-50 p-4"
+      onSubmit={submit}
+    >
+      {error && (
+        <div className="rounded-md border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700">
+          {error}
+        </div>
+      )}
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <label htmlFor="purchaseDescription" className="label block">
+            Descricao
+          </label>
+          <input
+            id="compra-descricao"
+            className="input mt-1"
+            placeholder="Ex.: Notebook Dell"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor="purchaseAmount" className="label block">
+            Valor total
+          </label>
+          <input
+            id="compra-valor"
+            className="input mt-1"
+            inputMode="decimal"
+            placeholder="Ex.: 3000.00"
+            value={totalAmount}
+            onChange={(e) => setTotalAmount(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor="purchaseInstallments" className="label block">
+            Parcelas
+          </label>
+          <input
+            id="compra-parcelas"
+            className="input mt-1"
+            type="number"
+            min={1}
+            max={48}
+            value={installments}
+            onChange={(e) => setInstallments(e.target.value)}
+            required
+          />
+          {preview && <p className="mt-1 text-xs text-neutral-500">{preview}</p>}
+        </div>
+        <div>
+          <label htmlFor="purchaseDate" className="label block">
+            Data da compra (opcional)
+          </label>
+          <input
+            id="compra-data"
+            className="input mt-1"
+            type="date"
+            value={purchaseDate}
+            onChange={(e) => setPurchaseDate(e.target.value)}
+          />
+        </div>
+      </div>
+      <button type="submit" className="btn-primary" id="compra-salvar" disabled={busy}>
+        {busy ? 'Lancando...' : 'Lancar compra'}
+      </button>
+    </form>
   );
 }
 

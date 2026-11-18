@@ -23,6 +23,23 @@ function purchase(
   });
 }
 
+/** Compra (opcionalmente parcelada) pelo endpoint dedicado do cartao. */
+function purchaseInstallments(
+  app: INestApplication,
+  token: string,
+  spaceId: string,
+  cardId: string,
+  body: Record<string, unknown>,
+  idempotencyKey?: string,
+) {
+  const req = api(app)
+    .post(`/api/v1/financial-spaces/${spaceId}/credit-cards/${cardId}/purchases`)
+    .set(auth(token))
+    .send(body);
+  if (idempotencyKey) req.set('Idempotency-Key', idempotencyKey);
+  return req;
+}
+
 describe('E2E | Cartoes de credito e faturas', () => {
   let app: INestApplication;
   let prisma: PrismaClient;
@@ -247,5 +264,152 @@ describe('E2E | Cartoes de credito e faturas', () => {
       .get(`/api/v1/financial-spaces/${user.spaceId}/credit-cards/00000000-0000-0000-0000-000000000000`)
       .set(auth(user.accessToken));
     expect(inexistente.status).toBe(404);
+  });
+
+  it('lanca a compra parcelada com a soma igual ao total e cada parcela na fatura esperada', async () => {
+    const user = await bootstrapUser(app);
+    const card = await createCreditCard(app, user.accessToken, user.spaceId, { closingDay: 25, dueDay: 5 });
+
+    const res = await purchaseInstallments(app, user.accessToken, user.spaceId, card.id, {
+      description: 'Notebook',
+      totalAmount: '1000.00',
+      installments: 3,
+      purchaseDate: '2020-01-10',
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.installments).toBe(3);
+    expect(res.body.totalAmount).toBe('1000.00');
+    expect(res.body.purchaseDate).toBe('2020-01-10');
+    expect(res.body.installmentGroupId).toEqual(expect.any(String));
+    expect(res.body.transactions).toHaveLength(3);
+
+    const parcelas = res.body.transactions as Array<{
+      description: string;
+      totalAmount: string;
+      effectiveDate: string;
+      installmentGroupId: string;
+      installmentNumber: number;
+      installmentCount: number;
+    }>;
+    // A sobra de arredondamento vai para a primeira parcela; a soma e exata.
+    expect(parcelas.map((p) => p.totalAmount)).toEqual(['333.34', '333.33', '333.33']);
+    expect(parcelas.reduce((acc, p) => acc + Number(p.totalAmount), 0)).toBeCloseTo(1000, 2);
+    expect(parcelas.map((p) => p.description)).toEqual(['Notebook (1/3)', 'Notebook (2/3)', 'Notebook (3/3)']);
+    expect(parcelas.map((p) => p.effectiveDate.slice(0, 10))).toEqual([
+      '2020-01-10',
+      '2020-02-10',
+      '2020-03-10',
+    ]);
+    // Todas as parcelas apontam para o mesmo grupo e se numeram em ordem.
+    const grupos = new Set(parcelas.map((p) => p.installmentGroupId));
+    expect(grupos.size).toBe(1);
+    expect(parcelas.map((p) => p.installmentNumber)).toEqual([1, 2, 3]);
+    expect(parcelas.every((p) => p.installmentCount === 3)).toBe(true);
+
+    // Cada parcela caiu no ciclo da sua competencia (fechamento dia 25).
+    const faturas = await api(app)
+      .get(`/api/v1/financial-spaces/${user.spaceId}/credit-cards/${card.id}/invoices`)
+      .set(auth(user.accessToken));
+    expect(faturas.status).toBe(200);
+    const porFechamento = Object.fromEntries(
+      (faturas.body as Array<{ id: string; totalAmount: string }>).map((f) => [f.id, f.totalAmount]),
+    );
+    expect(porFechamento).toEqual({
+      '2020-01-25': '333.34',
+      '2020-02-25': '333.33',
+      '2020-03-25': '333.33',
+    });
+
+    // A despesa total continua igual a compra: tres parcelas, nenhuma duplicacao.
+    const despesas = await prisma.transaction.findMany({
+      where: { financialSpaceId: user.spaceId, type: 'expense' },
+    });
+    expect(despesas).toHaveLength(3);
+  });
+
+  it('lanca compra a vista (installments = 1) sem metadados de parcelamento', async () => {
+    const user = await bootstrapUser(app);
+    const card = await createCreditCard(app, user.accessToken, user.spaceId, { closingDay: 25, dueDay: 5 });
+
+    const res = await purchaseInstallments(app, user.accessToken, user.spaceId, card.id, {
+      description: 'Cafe',
+      totalAmount: '25.00',
+      installments: 1,
+      purchaseDate: '2020-01-10',
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.installmentGroupId).toBeNull();
+    expect(res.body.transactions).toHaveLength(1);
+    expect(res.body.transactions[0].description).toBe('Cafe');
+    expect(res.body.transactions[0].installmentGroupId).toBeNull();
+    expect(res.body.transactions[0].installmentNumber).toBeNull();
+    expect(res.body.transactions[0].installmentCount).toBeNull();
+
+    const fatura = await api(app)
+      .get(`/api/v1/financial-spaces/${user.spaceId}/credit-cards/${card.id}/invoices/2020-01-25`)
+      .set(auth(user.accessToken));
+    expect(fatura.body.totalAmount).toBe('25.00');
+  });
+
+  it('recusa parcelamento invalido, valor nao positivo e cartao inexistente', async () => {
+    const user = await bootstrapUser(app);
+    const card = await createCreditCard(app, user.accessToken, user.spaceId);
+
+    const zeroParcelas = await purchaseInstallments(app, user.accessToken, user.spaceId, card.id, {
+      description: 'Invalido',
+      totalAmount: '100.00',
+      installments: 0,
+    });
+    expect(zeroParcelas.status).toBe(400);
+
+    const muitasParcelas = await purchaseInstallments(app, user.accessToken, user.spaceId, card.id, {
+      description: 'Invalido',
+      totalAmount: '100.00',
+      installments: 49,
+    });
+    expect(muitasParcelas.status).toBe(400);
+
+    const valorZero = await purchaseInstallments(app, user.accessToken, user.spaceId, card.id, {
+      description: 'Invalido',
+      totalAmount: '0.00',
+      installments: 3,
+    });
+    expect(valorZero.status).toBe(400);
+    expect(valorZero.body.code).toBe('INVALID_AMOUNT');
+
+    const cartaoInexistente = await purchaseInstallments(
+      app,
+      user.accessToken,
+      user.spaceId,
+      '00000000-0000-0000-0000-000000000000',
+      { description: 'Invalido', totalAmount: '100.00', installments: 2 },
+    );
+    expect(cartaoInexistente.status).toBe(404);
+  });
+
+  it('reexecuta a compra parcelada com a mesma Idempotency-Key sem duplicar parcelas', async () => {
+    const user = await bootstrapUser(app);
+    const card = await createCreditCard(app, user.accessToken, user.spaceId, { closingDay: 25, dueDay: 5 });
+    const body = {
+      description: 'Sofa',
+      totalAmount: '900.00',
+      installments: 3,
+      purchaseDate: '2020-01-10',
+    };
+    const key = 'idem-parcelado-1';
+
+    const primeira = await purchaseInstallments(app, user.accessToken, user.spaceId, card.id, body, key);
+    expect(primeira.status).toBe(201);
+
+    const segunda = await purchaseInstallments(app, user.accessToken, user.spaceId, card.id, body, key);
+    expect(segunda.status).toBe(201);
+    expect(segunda.body.installmentGroupId).toBe(primeira.body.installmentGroupId);
+
+    const despesas = await prisma.transaction.count({
+      where: { financialSpaceId: user.spaceId, type: 'expense' },
+    });
+    expect(despesas).toBe(3);
   });
 });

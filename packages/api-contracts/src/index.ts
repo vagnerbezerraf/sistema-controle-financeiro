@@ -159,6 +159,12 @@ export interface Transaction {
   dueDate?: IsoDate;
   tags?: string[];
   postings: Posting[];
+  /** Compra parcelada: grupo comum a todas as parcelas. */
+  installmentGroupId?: string | null;
+  /** Numero da parcela (1..installmentCount). */
+  installmentNumber?: number | null;
+  /** Quantidade total de parcelas da compra. */
+  installmentCount?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -231,6 +237,26 @@ export interface PayInvoiceRequest {
   fromAccountId: string;
   amount?: MoneyAmount;
   effectiveDate?: IsoDate;
+}
+
+export interface PurchaseInstallmentsRequest {
+  description: string;
+  totalAmount: MoneyAmount;
+  /** Numero de parcelas (1 a 48). `1` lanca uma compra a vista. */
+  installments: number;
+  /** Data da compra (competencia da primeira parcela). Padrao: hoje. */
+  purchaseDate?: IsoDate;
+  categoryId?: string;
+  tags?: string[];
+}
+
+export interface InstallmentPurchase {
+  /** Nulo quando a compra e a vista (`installments = 1`). */
+  installmentGroupId: string | null;
+  installments: number;
+  totalAmount: MoneyAmount;
+  purchaseDate: IsoDate;
+  transactions: Transaction[];
 }
 
 export interface Paginated<T> {

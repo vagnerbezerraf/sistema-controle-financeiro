@@ -5,12 +5,14 @@ import {
   IsNumberString,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { CurrencyCode } from '@prisma/client';
+import { MAX_INSTALLMENTS } from '../domain/installments';
 
 export class CreateCreditCardRequest {
   @ApiProperty({ example: 'Cartao Nubank' })
@@ -111,4 +113,40 @@ export class PayInvoiceRequest {
   @IsOptional()
   @IsDateString({ strict: true })
   effectiveDate?: string;
+}
+
+export class PurchaseInstallmentsRequest {
+  @ApiProperty({ example: 'Notebook Dell' })
+  @IsString()
+  @MaxLength(250)
+  description!: string;
+
+  @ApiProperty({ example: '3000.00', description: 'Valor total da compra' })
+  @IsNumberString({}, { message: 'Valor deve ser numerico decimal' })
+  totalAmount!: string;
+
+  @ApiProperty({ example: 3, description: `Numero de parcelas (1 a ${MAX_INSTALLMENTS})` })
+  @IsInt()
+  @Min(1)
+  @Max(MAX_INSTALLMENTS)
+  installments!: number;
+
+  @ApiProperty({
+    required: false,
+    example: '2026-04-10',
+    description: 'Data da compra (competencia da primeira parcela). Padrao: hoje.',
+  })
+  @IsOptional()
+  @IsDateString({ strict: true })
+  purchaseDate?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @ApiProperty({ required: false, type: [String] })
+  @IsOptional()
+  @IsString({ each: true })
+  tags?: string[];
 }

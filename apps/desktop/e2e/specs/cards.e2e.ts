@@ -40,4 +40,28 @@ describe('Desktop · cartoes e faturas', () => {
     await browser.waitUntil(async () => !(await $('[id^="pagar-20"]').isExisting()), { timeout: 30_000 });
     await expect(body).toHaveText(expect.stringContaining('aberto R$ 0,00'));
   });
+
+  it('lanca uma compra parcelada e distribui uma parcela por fatura', async () => {
+    const user = await seedUser({
+      creditCard: { name: 'Cartao Parcela E2E', closingDay: 25, dueDay: 5 },
+    });
+    await resetApp();
+    await login(user.email, user.password);
+
+    await clickNav('Cartoes');
+    const body = await $('body');
+    await expect(body).toHaveText(expect.stringContaining('Cartao Parcela E2E'));
+
+    await (await $('#nova-compra')).click();
+    await (await $('#compra-descricao')).setValue('Notebook E2E');
+    await (await $('#compra-valor')).setValue('3000.00');
+    await (await $('#compra-parcelas')).setValue('3');
+    await (await $('#compra-salvar')).click();
+
+    // Cada parcela cai na fatura da sua competencia: cada fatura mostra R$ 1.000,00.
+    await browser.waitUntil(
+      async () => (await body.getText()).includes('1.000,00'),
+      { timeout: 30_000 },
+    );
+  });
 });
