@@ -1,0 +1,20 @@
+appId: host.exp.exponent
+---
+- openLink: "exp://10.0.2.2:8081"
+- runFlow: scripts/ensure-logged-in.yaml
+
+# Aba Perfil e logout
+- tapOn:
+    id: "tab-perfil"
+- extendedWaitUntil:
+    visible: "Preferencias e sair da conta."
+    timeout: 20000
+- assertVisible: "SCF Mobile v0.1.0"
+- tapOn: "Sair da conta"
+
+# Volta para a tela de login
+- extendedWaitUntil:
+    visible:
+      id: "input-email"
+    timeout: 20000
+- assertVisible: "Controle financeiro pessoal e familiar com clareza."

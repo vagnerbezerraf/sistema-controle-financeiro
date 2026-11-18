@@ -1,0 +1,24 @@
+appId: host.exp.exponent
+---
+- openLink: "exp://10.0.2.2:8081"
+- runFlow: scripts/ensure-logged-in.yaml
+
+# Navega entre as abas principais
+- tapOn:
+    id: "tab-lancamentos"
+- extendedWaitUntil:
+    visible: "Registro rapido de movimentacoes."
+    timeout: 20000
+- assertVisible: "Sem lancamentos."
+
+- tapOn:
+    id: "tab-contas"
+- extendedWaitUntil:
+    visible: "Contas correntes, poupanca, carteiras."
+    timeout: 20000
+
+- tapOn:
+    id: "tab-dashboard"
+- extendedWaitUntil:
+    visible: "Resumo do mes atual."
+    timeout: 20000

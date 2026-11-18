@@ -1,0 +1,36 @@
+appId: host.exp.exponent
+---
+- openLink: "exp://10.0.2.2:8081"
+- runFlow: scripts/ensure-logged-out.yaml
+- assertVisible: "Controle financeiro pessoal e familiar com clareza."
+
+# Garante o modo de cadastro (o app nao reinicia entre fluxos)
+- tapOn:
+    id: "toggle-register"
+- extendedWaitUntil:
+    visible: "Nome (opcional)"
+    timeout: 15000
+
+- runScript: scripts/unique-email.js
+- tapOn:
+    id: "input-nome"
+- eraseText
+- inputText: "E2E Mobile"
+- tapOn:
+    id: "input-email"
+- eraseText
+- inputText: ${output.email}
+- tapOn:
+    id: "input-senha"
+- eraseText
+- inputText: "SenhaForte!123"
+- hideKeyboard
+- tapOn:
+    id: "btn-submit"
+
+# Cadastro bem-sucedido cai direto no dashboard
+- extendedWaitUntil:
+    visible: "Resumo do mes atual."
+    timeout: 90000
+- assertVisible: "Ola"
+- assertVisible: "Sem contas ainda."

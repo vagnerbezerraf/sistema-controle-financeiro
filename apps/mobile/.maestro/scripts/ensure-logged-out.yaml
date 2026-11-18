@@ -1,0 +1,27 @@
+appId: host.exp.exponent
+---
+# Subfluxo: garante que o app esteja deslogado (tela de login visivel).
+# O Expo Go persiste a sessao entre reloads, entao se o app abrir no
+# dashboard, saimos pela aba Perfil antes de continuar.
+
+# Aguarda o app terminar de carregar em qualquer um dos estados.
+- extendedWaitUntil:
+    visible: "SCF|Resumo do mes atual."
+    timeout: 150000
+
+- runFlow:
+    when:
+      visible:
+        id: "tab-perfil"
+    commands:
+      - tapOn:
+          id: "tab-perfil"
+      - extendedWaitUntil:
+          visible: "Sair da conta"
+          timeout: 20000
+      - tapOn: "Sair da conta"
+
+- extendedWaitUntil:
+    visible:
+      id: "input-email"
+    timeout: 60000

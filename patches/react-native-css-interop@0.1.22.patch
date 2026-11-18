@@ -1,0 +1,20 @@
+diff --git a/dist/runtime/native/render-component.js b/dist/runtime/native/render-component.js
+index a35233968df9438a3cfc205c30df82ff843ea442..9b99950417c98336a6229320e749a551a28ec6f5 100644
+--- a/dist/runtime/native/render-component.js
++++ b/dist/runtime/native/render-component.js
+@@ -122,7 +122,14 @@ function createAnimatedComponent(Component) {
+     return AnimatedComponent;
+ }
+ function printUpgradeWarning(warning, originalProps) {
+-    console.log(`CssInterop upgrade warning.\n\n${warning}.\n\nThis warning was caused by a component with the props:\n${stringify(originalProps)}\n\nIf adding or removing sibling components caused this warning you should add a unique "key" prop to your components. https://react.dev/learn/rendering-lists#keeping-list-items-in-order-with-key\n`);
++    let propsText;
++    try {
++        propsText = stringify(originalProps);
++    }
++    catch (error) {
++        propsText = `[nao serializavel: ${error?.message ?? error}]`;
++    }
++    console.log(`CssInterop upgrade warning.\n\n${warning}.\n\nThis warning was caused by a component with the props:\n${propsText}\n\nIf adding or removing sibling components caused this warning you should add a unique "key" prop to your components. https://react.dev/learn/rendering-lists#keeping-list-items-in-order-with-key\n`);
+ }
+ function stringify(object) {
+     const seen = new WeakSet();

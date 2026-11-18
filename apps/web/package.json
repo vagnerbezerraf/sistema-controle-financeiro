@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:unit": "vitest run src --passWithNoTests",
-    "clean": "rimraf .next node_modules/.cache .turbo"
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "clean": "rimraf .next node_modules/.cache .turbo test-results playwright-report"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -30,6 +32,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@scf/config": "workspace:*",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",

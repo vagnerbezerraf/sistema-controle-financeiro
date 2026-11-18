@@ -22,6 +22,9 @@
     "test:unit": {
       "dependsOn": ["^test:unit"]
     },
+    "test:e2e": {
+      "cache": false
+    },
     "clean": {
       "cache": false
     },

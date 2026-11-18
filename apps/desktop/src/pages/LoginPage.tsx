@@ -78,12 +78,12 @@ export default function LoginPage() {
           <form onSubmit={onSubmit} className="space-y-4">
             <div>
               <label className="label block">E-mail</label>
-              <input type="email" className="input mt-1" {...register('email')} />
+              <input id="email" type="email" className="input mt-1" {...register('email')} />
               {errors.email && <p className="mt-1 text-xs text-danger-600">{errors.email.message}</p>}
             </div>
             <div>
               <label className="label block">Senha</label>
-              <input type="password" className="input mt-1" {...register('password')} />
+              <input id="password" type="password" className="input mt-1" {...register('password')} />
               {errors.password && <p className="mt-1 text-xs text-danger-600">{errors.password.message}</p>}
             </div>
             {error && (

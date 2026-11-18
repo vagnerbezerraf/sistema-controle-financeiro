@@ -25,19 +25,23 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="dashboard" options={{
         title: 'Dashboard',
+        tabBarButtonTestID: 'tab-dashboard',
         tabBarIcon: ({ color }) => <LayoutDashboard size={22} color={color} />,
       }} />
       <Tabs.Screen name="transactions" options={{
         title: 'Lancamentos',
+        tabBarButtonTestID: 'tab-lancamentos',
         tabBarIcon: ({ color }) => <ArrowLeftRight size={22} color={color} />,
         headerRight: () => <NewButton onPress={() => {}} />,
       }} />
       <Tabs.Screen name="accounts" options={{
         title: 'Contas',
+        tabBarButtonTestID: 'tab-contas',
         tabBarIcon: ({ color }) => <Wallet size={22} color={color} />,
       }} />
       <Tabs.Screen name="profile" options={{
         title: 'Perfil',
+        tabBarButtonTestID: 'tab-perfil',
         tabBarIcon: ({ color }) => <User size={22} color={color} />,
       }} />
     </Tabs>

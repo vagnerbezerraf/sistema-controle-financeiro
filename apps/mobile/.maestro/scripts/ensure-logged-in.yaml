@@ -1,0 +1,29 @@
+appId: host.exp.exponent
+---
+# Subfluxo: garante que o app esteja logado (dashboard visivel).
+# Se a tela de login estiver visivel, autentica com a conta semeada.
+
+- extendedWaitUntil:
+    visible: "SCF|Resumo do mes atual."
+    timeout: 150000
+
+- runFlow:
+    when:
+      visible:
+        id: "input-email"
+    commands:
+      - tapOn:
+          id: "input-email"
+      - eraseText
+      - inputText: "e2e.mobile@scf.dev"
+      - tapOn:
+          id: "input-senha"
+      - eraseText
+      - inputText: "SenhaForte!123"
+      - hideKeyboard
+      - tapOn:
+          id: "btn-submit"
+
+- extendedWaitUntil:
+    visible: "Resumo do mes atual."
+    timeout: 120000

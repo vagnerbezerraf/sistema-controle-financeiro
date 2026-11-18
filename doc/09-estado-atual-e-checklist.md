@@ -1,7 +1,7 @@
 # Estado atual da implementação · checklist e próximos passos
 
 > Status global: **Fase 0 do roadmap (Fundação e scaffold) concluída** — scaffold completo, incluindo o build real do desktop (Tauri 2 + Rust) com a janela nativa validada e instaladores MSI/NSIS gerados.
-> Última atualização: 6 de novembro de 2026
+> Última atualização: 18 de novembro de 2026
 > Referência: [doc/07-roadmap.md](./07-roadmap.md), [doc/11-adr-oidc-pkce.md](./11-adr-oidc-pkce.md), [README.md raiz](../README.md)
 
 ## 1. Mapão de status por fase do roadmap
@@ -9,7 +9,7 @@
 | Fase | Objetivo (resumido) | % concluído | Observação |
 |---|---|---|---|
 | **FASE 0 · Fundação e scaffold** | Estrutura, autenticação, criar espaço, CI/CD, homologação | **100%** | Fluxo completo (cadastro → login → criar espaço → dashboard) validado de ponta a ponta na API e no web; lint, CI, Pino + OpenTelemetry, threat model, OIDC/PKCE (Keycloak), MFA (TOTP) + recuperação de senha, homologação (Dockerfiles + `docker-compose.staging.yml` + job de build das imagens no CI) e **build real do desktop (Tauri 2 + Rust)** com janela nativa e instaladores MSI/NSIS validados. |
-| FASE 1 · Núcleo financeiro (presente confiável) | Contas, lançamentos, transferências, estornos, saldos, dashboard | ~40% | API de contas, categorias e transações (com idempotência e dashboard) já existe. Faltam estornos formalizados, concorrência otimista, exportação e testes E2E. |
+| FASE 1 · Núcleo financeiro (presente confiável) | Contas, lançamentos, transferências, estornos, saldos, dashboard | ~58% | API de contas, categorias e transações (com idempotência e dashboard) coberta por **35 testes E2E da API** (§2.8), **7 testes E2E da Web** (§2.9), **5 fluxos E2E do Mobile** (§2.10) e **6 testes E2E do Desktop** (§2.11). Faltam estornos formalizados, concorrência otimista e exportação. |
 | FASE 2 · Compromissos e crédito | Cartões, parcelas, recorrências, calendário, alertas, worker | ~10% | Models `CreditCard`, `Invoice`, `RecurrenceRule`, `Obligation` existem. Worker tem só stub; nenhuma regra de negócio implementada. |
 | FASE 3 · Planejamento | Orçamentos, metas, saldo projetado, cenários | ~10% | Models `Budget`, `Goal` existem. Nenhum cálculo implementado. |
 | FASE 4 · Portabilidade e colaboração | CSV/OFX, conciliação, espaços familiares, comprovantes | ~10% | `Membership` funcional (listar/convidar). Falta importação CSV/OFX, conciliação e comprovantes em S3. |
@@ -83,6 +83,32 @@
 - ✅ **Dockerfiles multi-stage**: [`apps/api/Dockerfile`](../apps/api/Dockerfile) e [`apps/web/Dockerfile`](../apps/web/Dockerfile) construídos e executados localmente.
 - ✅ **Stack de staging completa**: [`docker-compose.staging.yml`](../docker-compose.staging.yml) sobe postgres + redis + keycloak + job `migrate` + api + web, com healthchecks e rede própria. Validado E2E (`up --build` → migrações → API → `/health` = ok → `/login` = 200 → seed).
 - ✅ **CI com build de imagens**: job `docker-build` em [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) usa Buildx + cache do GitHub Actions para construir as imagens da API e do Web.
+
+### 2.8 Testes automatizados (E2E da API)
+
+- ✅ **E2E da API** — Vitest 2 + Supertest com `@nestjs/testing`, rodando contra **PostgreSQL real** (banco dedicado `scf_test`, criado e migrado automaticamente). Specs em [`apps/api/test/e2e`](../apps/api/test/e2e): identidade (cadastro, normalização de e-mail, duplicidade, login, refresh, `/identity/me`, ciclo completo de MFA TOTP + código de recuperação, reset de senha), espaços financeiros e membros (criar/detalhar/atualizar, isolamento entre usuários, convite, bloqueio por papel), contas (saldo inicial gera ajuste; list/detail/patch; 404/403/400) e transações (criação, `INVALID_POSTINGS`/`INVALID_TRANSFER_POSTINGS`, transferência, **idempotência** por `Idempotency-Key`, listagem com filtros e cursor, detalhe + cancelamento lógico, **dashboard** do mês e isolamento entre espaços). **35 testes, todos verdes.**
+- ✅ **Infra de teste isolada** — [`vitest.config.e2e.ts`](../apps/api/vitest.config.e2e.ts) transforma via `unplugin-swc` (com `emitDecoratorMetadata`, exigido pela injeção de dependência do Nest), e [`test/e2e`](../apps/api/test/e2e) traz `.env.test`, `globalSetup` (cria o banco + `prisma migrate deploy`), `setupFiles` e helpers (app de teste, reset de banco, factories). A `DATABASE_URL` de teste é validada para conter `scf_test` — proteção contra truncar o banco de desenvolvimento.
+
+### 2.9 Testes automatizados (E2E da Web)
+
+- ✅ **E2E da Web** — Playwright 1.65 rodando o **Next.js real contra a API real** (o `webServer` da config sobe `@scf/api` e `@scf/web` automaticamente). Specs em [`apps/web/e2e`](../apps/web/e2e): **[`auth.e2e.spec.ts`](../apps/web/e2e/auth.e2e.spec.ts)** cobre cadastro pela UI (`/register` → `/app/dashboard`), login válido, credenciais inválidas (erro + permanece em `/login`) e logout (volta para `/login`); **[`app.e2e.spec.ts`](../apps/web/e2e/app.e2e.spec.ts)** cobre o dashboard com dados reais (totais de receitas/despesas/saldo do mês) e a listagem de lançamentos. **7 testes, todos verdes (~44s).**
+- ✅ **Isolamento por teste** — cada teste cria o seu próprio usuário via API ([`e2e/utils/api.ts`](../apps/web/e2e/utils/api.ts)), então os dados ficam isolados dentro do espaço financeiro recém-criado mesmo com o banco de desenvolvimento (`scf`) compartilhado.
+- ✅ **Configuração** — [`playwright.config.ts`](../apps/web/playwright.config.ts) com `testDir: ./e2e`, `baseURL` do web, `locale: pt-BR` e `timezoneId: America/Sao_Paulo` (para a competência dos dados bater com a API). A URL da API é passada ao Next pelo env `NEXT_PUBLIC_API_BASE_URL` (origem + prefixo `/api/v1`). Requer o Chromium instalado (`pnpm exec playwright install chromium`).
+
+### 2.10 Testes automatizados (E2E do Mobile)
+
+- ✅ **E2E do Mobile** — **Maestro 2.12** (JVM/`JAVA_HOME` jdk-22) rodando o **app Expo real** no **emulador Android** (`scf_e2e`, `emulator-5554`), servido pelo Metro em `exp://10.0.2.2:8081` e falando com a **API real** (`http://127.0.0.1:3001`). Fluxos em [`apps/mobile/.maestro`](../apps/mobile/.maestro): **01-cadastro** (cadastro pela UI com e-mail único → cai no dashboard vazio), **02-login-invalido** (senha errada → mensagem "Credenciais invalidas" e permanece na tela), **03-login-valido** (conta semeada → dashboard com Receitas/Despesas/Realizado/Projetado), **04-navegacao** (abas Lançamentos/Contas/Dashboard) e **05-logout** (aba Perfil → "Sair da conta" → volta ao login). **5/5 fluxos verdes (~5min52).**
+- ✅ **Isolamento e estado** — cada fluxo abre o app via `openLink` (`exp://10.0.2.2:8081`) e usa subfluxos de apoio [`ensure-logged-out.yaml`](../apps/mobile/.maestro/scripts/ensure-logged-out.yaml) / [`ensure-logged-in.yaml`](../apps/mobile/.maestro/scripts/ensure-logged-in.yaml); 01 gera um e-mail único por execução com [`unique-email.js`](../apps/mobile/.maestro/scripts/unique-email.js) (`e2e.mobile.<timestamp>@scf.dev`).
+- ✅ **Estabilidade de testID** — a tela de login expõe `toggle-login`/`toggle-register`, `input-nome`/`input-email`/`input-senha` e `btn-submit`; as abas expõem `tab-dashboard`/`tab-lancamentos`/`tab-contas`/`tab-perfil`.
+- ✅ **Seed dedicado** — o usuário `e2e.mobile@scf.dev` (senha `SenhaForte!123`) é criado por [`apps/mobile/scripts/e2e-seed.mjs`](../apps/mobile/scripts/e2e-seed.mjs) para os fluxos de login.
+
+### 2.11 Testes automatizados (E2E do Desktop)
+
+- ✅ **E2E do Desktop** — **tauri-driver 2.1.0 + WebdriverIO 9.33** rodando o **binário Tauri real** (`scf-desktop.exe`, build `--debug --no-bundle`, WebView2 157) contra a **API real** (`http://127.0.0.1:3001`). Specs em [`apps/desktop/e2e/specs`](../apps/desktop/e2e/specs): **[`auth.e2e.ts`](../apps/desktop/e2e/specs/auth.e2e.ts)** cobre abrir no login sem sessão salva, senha inválida (erro + permanece no login) e login válido (entra no dashboard); **[`app.e2e.ts`](../apps/desktop/e2e/specs/app.e2e.ts)** cobre a consolidação do dashboard com dados reais (totais `1.000,00`/`250,50`/`749,50`, descrições "Salario E2E"/"Aluguel E2E"), a navegação Lançamentos/Contas/Dashboard e o logout (volta ao login). **6 testes, todos verdes (~21s).**
+- ✅ **Isolamento por teste** — cada teste cria o próprio usuário via API ([`e2e/utils/api.ts`](../apps/desktop/e2e/utils/api.ts)) com e-mail único (`desktop.e2e.<ts>.<n>@scf.test`) e semeia lançamentos confirmados no mês corrente, isolando os dados por espaço financeiro. O helper [`e2e/utils/ui.ts`](../apps/desktop/e2e/utils/ui.ts) limpa o `localStorage` do WebView2 e recarrega antes de cada login (o WebView2 persiste o storage entre execuções).
+- ✅ **Driver casado com o WebView2** — [`e2e/scripts/setup-drivers.ts`](../apps/desktop/e2e/scripts/setup-drivers.ts) baixa/extrai o `msedgedriver` na versão exata do WebView2 instalado (extração via `System.IO.Compression.ZipFile`, não `Expand-Archive`) e valida `--version` antes de registrar. Em [`e2e/wdio.conf.ts`](../apps/desktop/e2e/wdio.conf.ts), o `onPrepare` garante o driver e reconstrói o app via [`e2e/scripts/build-app.ts`](../apps/desktop/e2e/scripts/build-app.ts) (salvo `E2E_SKIP_BUILD=1`); o `beforeSession` sobe o `tauri-driver --native-driver <msedgedriver>` em `127.0.0.1:4444`.
+- ⚠️ **Rebuild obrigatório ao mudar o frontend** — o binário Tauri embute o `dist` do Vite (`beforeBuildCommand` do [`tauri.conf.json`](../apps/desktop/src-tauri/tauri.conf.json)); mudanças em `src/**` só aparecem após reconstruir (o `onPrepare` faz isso por padrão).
+- ⚠️ **Precisa rodar fora do sandbox do Trae** — o sandbox injeta DLLs no WebView2 e o Chromium aborta com `FAIL_FAST`; ver §4.16 e o runner em §5.5.
 
 ---
 
@@ -221,6 +247,43 @@ Validar com `node -e "require('@prisma/client')"` dentro da imagem → `PrismaCl
 - **`Can't open language file ... PortugueseBrazil.nlf`** — o idioma do NSIS é `PortugueseBR` (não `PortugueseBrazil`).
 - **Build limpo**: `pnpm --filter @scf/desktop tauri build` gera `scf-desktop.exe` + `SCF_0.1.0_x64_pt-BR.msi` + `SCF_0.1.0_x64-setup.exe` em `src-tauri/target/release/bundle/`.
 
+### 4.14 NativeWind/`react-native-css-interop`: o aviso de "upgrade" CRASHA o app em dev
+
+**Sintoma**: no Android (Expo Go), ao **interagir** com componentes cujo `className` muda depois do primeiro render (ex.: tocar num toggle que troca `bg-white shadow-sm` por outra classe), aparece um overlay vermelho **"Render Error: Couldn't find a navigation context. Have you wrapped your app with 'NavigationContainer'?"** com Component Stack `<CssInterop.TouchableOpacity />` e Call Stack passando por `react-native-css-interop/dist/runtime/native/render-component.js :: replace`. O app fica coberto pelo LogBox e os testes E2E falham (o elemento esperado nunca fica visível).
+
+**Causa raiz**: quando a classe de um componente re-renderizado introduz variáveis CSS (`--tw-*`), o css-interop marca `SHOULD_UPGRADE` e chama `printUpgradeWarning`, que faz `stringify(originalProps)` (um `JSON.stringify` recursivo). O replacer acessa *getters* dos props; alguns props carregam o contexto do React Navigation, cujo getter `getKey` **lança** `"Couldn't find a navigation context"`. Como isso roda **durante o render**, o throw derruba a árvore e o LogBox mostra "Render Error".
+> As classes com cor sólida também introduzem variável (`bg-neutral-100`/`text-neutral-900` → `--tw-bg-opacity`/`--tw-text-opacity`), então "trocar o className por outro utilitário" **não** resolve — o gatilho é a *mudança*, não o utilitário.
+
+**Correção aplicada (NÃO REVERTER)** — patch do pacote via pnpm:
+- [`patches/react-native-css-interop@0.1.22.patch`](../patches/react-native-css-interop@0.1.22.patch) envolve `stringify(originalProps)` num `try/catch` (logando `[nao serializavel: ...]`), e o `patchedDependencies` fica registrado no [`package.json`](../package.json) raiz.
+
+### 4.15 Metro do Expo em `CI=true` serve bundle ANTIGO (reloads desabilitados)
+
+**Sintoma**: você edita `apps/mobile/**` ou um arquivo em `node_modules`, mas o app continua rodando o código antigo — os fixes "não surtem efeito" e o diagnóstico vira chute.
+
+**Causa raiz**: com `CI=true` no ambiente, o `expo start` avisa *"Metro is running in CI mode, reloads are disabled"*: não há watch/Fast Refresh e o bundle vem do cache.
+
+**Correção**: rodar o Metro **sem** `CI` (`Remove-Item Env:CI`) e/ou reiniciar com `npx expo start --clear` para descartar o cache de transformação. Neste sandbox, escrever em `%USERPROFILE%\.expo` (cache de módulos nativos) é bloqueado — contorne apontando `USERPROFILE`/`HOME` para uma pasta dentro do projeto antes de subir o Metro.
+
+### 4.16 Sandbox do Trae injeta DLLs no WebView2 e derruba o Chromium (E2E do desktop)
+
+**Sintoma**: o `wdio` falha em `POST /session` com `session not created: DevToolsActivePort file doesn't exist` (timeout ~60s). O `scf-desktop.exe` sobe, mas o processo `msedgewebview2.exe` do app morre imediatamente.
+
+**Diagnóstico (Windows Event Log / WER)**: o log `Application` e o `Report.wer` (`C:\ProgramData\Microsoft\Windows\WER\ReportArchive\AppCrash_msedgewebview2*`) mostram:
+```
+Nome do aplicativo com falha: msedgewebview2.exe, versão: 157.0.4341.60
+Nome do módulo com falha: msedge.dll    Código de exceção: 0x80000003 (STATUS_BREAKPOINT / FAIL_FAST)
+```
+e, na lista de módulos carregados, as **DLLs do sandbox do Trae**:
+```
+...\Trae\resources\app\modules\sandbox\x64\aiep_sbox.dll
+...\Trae\resources\app\modules\sandbox\x64\aiep_ipc.dll
+```
+
+**Causa raiz**: o sandbox do Trae injeta `aiep_sbox.dll`/`aiep_ipc.dll` em processos-filho. O Chromium/WebView2 detecta a injeção de DLL não assinada/não whitelisted e dispara `FAIL_FAST` (0x80000003) — "integridade do processo comprometida".
+
+**Correção**: rodar o build + E2E **fora da árvore de processos do sandbox** (ex.: via Agendador de Tarefas do Windows). Comprovado: dentro do sandbox o `msedgewebview2.exe` não sobrevive; fora dele a sessão é criada e os **6 testes passam**. Ver o runner em §5.5.
+
 ---
 
 ## 5. Comandos de sanidade (rodar antes de começar qualquer dia)
@@ -238,7 +301,32 @@ pnpm db:generate        # Re-gera o Prisma Client LOCAL em apps/api e apps/worke
 # Se mudar .npmrc / pnpm-workspace.yaml: pnpm install de novo
 ```
 
-### 5.1 Stack de homologação (staging)
+### 5.1 Testes E2E da API
+
+```bash
+# Exigem o Postgres rodando (o globalSetup cria e migra o banco scf_test):
+docker compose up -d postgres
+pnpm --filter @scf/api test:e2e     # ou: pnpm turbo run test:e2e  → 35 testes verdes
+```
+
+### 5.2 Testes E2E da Web
+
+```bash
+# 1) Instalar o navegador do Playwright (uma vez):
+pnpm --filter @scf/web exec playwright install chromium
+
+# 2) Exige o Postgres rodando (usa o banco de desenvolvimento `scf`):
+docker compose up -d postgres
+
+# 3) Roda a suíte. O `webServer` do Playwright sobe a API e o Next automaticamente
+#    (em dev) se não estiverem rodando; se já estiverem, eles são reaproveitados:
+pnpm --filter @scf/web test:e2e        # → 7 testes verdes (~44s)
+pnpm --filter @scf/web test:e2e:ui     # modo interativo (Playwright UI)
+```
+
+> Os testes criam o próprio usuário via API a cada execução, então não precisam de reset do banco. Cada teste fica isolado no seu próprio espaço financeiro.
+
+### 5.3 Stack de homologação (staging)
 
 ```bash
 # Sobe tudo (postgres + redis + keycloak + migrate + api + web) com build das imagens:
@@ -259,6 +347,44 @@ docker compose -f docker-compose.staging.yml down -v
 
 > As credenciais do compose são apenas defaults de desenvolvimento; em ambientes reais use variáveis de ambiente / secrets do orquestrador.
 
+### 5.4 Testes E2E do Mobile (Maestro)
+
+```powershell
+# Pré-requisitos: Postgres + API (porta 3001) + emulador Android rodando,
+# e o Metro do Expo servindo o app.
+
+# 1) Semeia a conta usada nos fluxos de login (idempotente):
+cd apps/mobile; pnpm e2e:seed
+
+# 2) Sobe o Metro do app (na raiz do app; mantê-lo aberto durante a suíte):
+npx expo start
+
+# 3) Roda a suíte pelo emulador alvo (Maestro no PATH):
+maestro --device emulator-5554 test .maestro      # → 5/5 fluxos verdes
+```
+
+> Rodar um fluxo isolado: `maestro --device emulator-5554 test .maestro/01-cadastro.yaml`.
+> O Metro precisa de **watch mode** (não rode com `CI=true`, que desliga o reload e serve bundles antigos).
+> Requer JVM 22 (`JAVA_HOME` apontando para o JDK 22) para o Maestro.
+
+### 5.5 Testes E2E do Desktop (tauri-driver)
+
+```powershell
+# Pré-requisitos: Postgres + API (porta 3001) rodando, toolchain Rust (MSVC x64),
+# tauri-driver no PATH (~/.cargo/bin) e o WebView2 instalado.
+
+# 1) Baixa/atualiza o msedgedriver casado com o WebView2 (idempotente):
+pnpm --filter @scf/desktop e2e:drivers
+
+# 2) Reconstrói o binário de debug (embute o dist do Vite):
+pnpm --filter @scf/desktop e2e:build
+
+# 3) Roda a suíte (o onPrepare já garante driver + build):
+pnpm --filter @scf/desktop test:e2e   # -> 6 testes verdes (~21s)
+```
+
+> **Importante**: o WebView2 aborta se o processo sofrer injeção de DLL do sandbox do Trae (§4.16). Rode os comandos acima em um terminal **fora do sandbox** (ex.: agendando via Agendador de Tarefas do Windows). Se o build já estiver atualizado, defina `$env:E2E_SKIP_BUILD = '1'` para pular o rebuild do passo 3.
+
 ---
 
 ## 6. Próximos passos para fechar a Fase 0
@@ -277,4 +403,4 @@ Ordem recomendada (todos concluídos):
 8. ✅ **Homologação (staging)** — Dockerfiles + [`docker-compose.staging.yml`](../docker-compose.staging.yml) + job de build das imagens no CI.
 9. ✅ **Build Tauri real** — `tauri build` com a toolchain Rust + WebView2 gerando `scf-desktop.exe` e instaladores MSI/NSIS; janela nativa validada sem crash.
 
-**Fase 0 fechada.** Próximo: início da Fase 1 (estornos, concorrência otimista, exportação e testes E2E).
+**Fase 0 fechada.** Próximo: continuação da Fase 1 — **testes E2E da API (35 verdes)**, **da Web (7 verdes, Playwright)**, **do Mobile (5 fluxos verdes, Maestro)** e **do Desktop (6 verdes, tauri-driver/WebdriverIO)** concluídos; seguem os itens de produto restantes (estornos formalizados, concorrência otimista, exportação).

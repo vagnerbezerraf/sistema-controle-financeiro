@@ -1,0 +1,29 @@
+appId: host.exp.exponent
+---
+- openLink: "exp://10.0.2.2:8081"
+- runFlow: scripts/ensure-logged-out.yaml
+- assertVisible: "Controle financeiro pessoal e familiar com clareza."
+
+# Garante o modo de login (o app nao reinicia entre fluxos)
+- tapOn:
+    id: "toggle-login"
+
+# Senha incorreta para a conta semeada
+- tapOn:
+    id: "input-email"
+- eraseText
+- inputText: "e2e.mobile@scf.dev"
+- tapOn:
+    id: "input-senha"
+- eraseText
+- inputText: "SenhaErrada!999"
+- hideKeyboard
+- tapOn:
+    id: "btn-submit"
+
+# A API responde 401 com "Credenciais invalidas" e a tela exibe o erro
+- extendedWaitUntil:
+    visible: "Credenciais invalidas"
+    timeout: 60000
+- assertVisible:
+    id: "input-email"

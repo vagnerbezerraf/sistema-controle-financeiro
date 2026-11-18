@@ -1,0 +1,32 @@
+appId: host.exp.exponent
+---
+- openLink: "exp://10.0.2.2:8081"
+- runFlow: scripts/ensure-logged-out.yaml
+- assertVisible: "Controle financeiro pessoal e familiar com clareza."
+
+# Garante o modo de login (o app nao reinicia entre fluxos)
+- tapOn:
+    id: "toggle-login"
+
+- tapOn:
+    id: "input-email"
+- eraseText
+- inputText: "e2e.mobile@scf.dev"
+- tapOn:
+    id: "input-senha"
+- eraseText
+- inputText: "SenhaForte!123"
+- hideKeyboard
+- tapOn:
+    id: "btn-submit"
+
+# Dashboard carregado com o resumo do mes
+- extendedWaitUntil:
+    visible: "Resumo do mes atual."
+    timeout: 90000
+- assertVisible: "Ola"
+- assertVisible: "Receitas"
+- assertVisible: "Despesas"
+- assertVisible: "Realizado"
+- assertVisible: "Projetado"
+- assertVisible: "Saldos cadastrados."

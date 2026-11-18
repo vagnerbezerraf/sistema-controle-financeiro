@@ -86,12 +86,14 @@ export default function LoginScreen() {
         <View className="px-6 pb-10">
           <View className="flex-row bg-neutral-100 rounded-md p-1 mb-6">
             <TouchableOpacity
+              testID="toggle-login"
               onPress={() => { setMode('login'); setMfaRequired(false); }}
               className={`flex-1 py-2 rounded ${mode === 'login' ? 'bg-white shadow-sm' : ''}`}
             >
               <Text className={`text-center text-sm font-medium ${mode === 'login' ? 'text-neutral-900' : 'text-neutral-600'}`}>Entrar</Text>
             </TouchableOpacity>
             <TouchableOpacity
+              testID="toggle-register"
               onPress={() => { setMode('register'); setMfaRequired(false); }}
               className={`flex-1 py-2 rounded ${mode === 'register' ? 'bg-white shadow-sm' : ''}`}
             >
@@ -107,6 +109,7 @@ export default function LoginScreen() {
                 name="name"
                 render={({ field: { onBlur, onChange, value } }) => (
                   <TextInput
+                    testID="input-nome"
                     className="input mt-1"
                     placeholder="Seu nome"
                     onBlur={onBlur}
@@ -127,6 +130,7 @@ export default function LoginScreen() {
               name="email"
               render={({ field: { onBlur, onChange, value } }) => (
                 <TextInput
+                  testID="input-email"
                   className="input mt-1"
                   placeholder="voce@exemplo.com"
                   keyboardType="email-address"
@@ -148,6 +152,7 @@ export default function LoginScreen() {
               name="password"
               render={({ field: { onBlur, onChange, value } }) => (
                 <TextInput
+                  testID="input-senha"
                   className="input mt-1"
                   placeholder="Minimo 8 caracteres"
                   secureTextEntry
@@ -192,6 +197,7 @@ export default function LoginScreen() {
           )}
 
           <TouchableOpacity
+            testID="btn-submit"
             activeOpacity={0.8}
             onPress={submit}
             disabled={loading}
