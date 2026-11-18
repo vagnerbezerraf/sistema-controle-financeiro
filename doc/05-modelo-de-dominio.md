@@ -102,6 +102,16 @@ O cartão define limite, conta associada, fechamento e vencimento. A fatura repr
 
 O pagamento da fatura é uma transferência da conta pagadora para a conta do cartão. As compras já constituem despesas; o pagamento não pode contabilizá-las novamente.
 
+Implementação atual (fatia de cartões e faturas da Fase 2):
+
+- **Cartão apoiado em conta técnica.** `CreditCard` é ligado a um `Account` com `type = credit_card`. Compras, estornos e pagamentos são lançados pelo endpoint de transações, sem tratamento especial — a conta do cartão se comporta como qualquer outra conta.
+- **Fatura é agregação derivada, não entidade.** As faturas são calculadas on-the-fly a partir dos movimentos da conta do cartão (ver [`invoice-aggregation.ts`](../apps/api/src/credit-cards/domain/invoice-aggregation.ts)). O modelo `Invoice` existe no banco mas não é persistido nesta fatia: evitar a tabela como fonte de verdade elimina o risco de divergência entre a tabela e as transações.
+- **Ciclo de fechamento.** `closingDay`/`dueDay` são dias do mês (1–31) ajustados ao último dia válido quando o mês é mais curto. Uma compra pertence à fatura cujo fechamento é o **primeiro** dia de fechamento maior ou igual à data da compra; o ciclo começa no dia seguinte ao fechamento anterior; o vencimento é o primeiro dia de vencimento **estritamente posterior** ao fechamento. Regras puras em [`billing-cycle.ts`](../apps/api/src/credit-cards/domain/billing-cycle.ts).
+- **Sinais.** Na conta do cartão, compra é movimento `credit` (aumenta a dívida) e pagamento/estorno é movimento `debit` (reduz a dívida) — a mesma convenção das demais contas.
+- **Pagamento em cascata (FIFO).** Os movimentos `debit` quitam as faturas da mais antiga para a mais recente; em centavos, para evitar deriva de ponto flutuante ([`invoice-allocation.ts`](../apps/api/src/credit-cards/domain/invoice-allocation.ts)). Isso dispensa vincular cada pagamento a uma fatura específica.
+- **Situação da fatura.** `paid` quando os créditos cobrem as compras; `overdue` após o vencimento sem quitação; `closed` entre fechamento e vencimento; `open` enquanto o ciclo ainda está em formação.
+
+
 ### Regra de recorrência
 
 Armazena frequência, intervalo, data inicial, término, timezone e modelo de valor/classificação. A regra gera obrigações com antecedência limitada. Exceções pertencem à ocorrência, não reescrevem o histórico da regra.

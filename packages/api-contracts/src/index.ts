@@ -182,6 +182,57 @@ export interface CreateTransactionRequest {
   }>;
 }
 
+export type InvoiceStatus = 'open' | 'closed' | 'overdue' | 'paid';
+
+export interface CreditCard {
+  id: string;
+  accountId: string;
+  name: string;
+  limit: MoneyAmount;
+  closingDay: number;
+  dueDay: number;
+  account?: Account;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCreditCardRequest {
+  name: string;
+  limit: MoneyAmount;
+  closingDay: number;
+  dueDay: number;
+  currency?: CurrencyCode;
+  institution?: string;
+  color?: string;
+  icon?: string;
+}
+
+export interface UpdateCreditCardRequest {
+  name?: string;
+  limit?: MoneyAmount;
+  closingDay?: number;
+  dueDay?: number;
+  version?: number;
+}
+
+export interface Invoice {
+  id: string;
+  closingDate: IsoDate;
+  cycleStart: IsoDate;
+  cycleEnd: IsoDate;
+  dueDate: IsoDate;
+  totalAmount: MoneyAmount;
+  paidAmount: MoneyAmount;
+  outstandingAmount: MoneyAmount;
+  status: InvoiceStatus;
+}
+
+export interface PayInvoiceRequest {
+  fromAccountId: string;
+  amount?: MoneyAmount;
+  effectiveDate?: IsoDate;
+}
+
 export interface Paginated<T> {
   items: T[];
   total: number;

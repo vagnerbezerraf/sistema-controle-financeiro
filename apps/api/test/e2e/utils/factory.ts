@@ -77,6 +77,23 @@ export async function createAccount(
   return res.body;
 }
 
+export async function createCreditCard(
+  app: INestApplication,
+  token: string,
+  spaceId: string,
+  body: Record<string, unknown> = {},
+): Promise<{ id: string; accountId: string; name: string; closingDay: number; dueDay: number }> {
+  const res = await api(app)
+    .post(`/api/v1/financial-spaces/${spaceId}/credit-cards`)
+    .set(auth(token))
+    .send({ name: 'Cartao E2E', limit: '5000.00', closingDay: 25, dueDay: 5, ...body });
+
+  if (res.status !== 201) {
+    throw new Error(`Falha ao criar cartao (HTTP ${res.status}): ${JSON.stringify(res.body)}`);
+  }
+  return res.body;
+}
+
 export interface TransactionBody {
   type: 'income' | 'expense' | 'transfer' | 'adjustment';
   description: string;

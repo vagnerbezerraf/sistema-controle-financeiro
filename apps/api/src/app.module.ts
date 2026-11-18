@@ -14,6 +14,7 @@ import { SpacesModule } from './financial-spaces/financial-spaces.module';
 import { AccountsModule } from './accounts/accounts.module';
 import { CategoriesModule } from './categories/categories.module';
 import { TransactionsModule } from './transactions/transactions.module';
+import { CreditCardsModule } from './credit-cards/credit-cards.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { JwtAuthGuard, SpaceRoleGuard } from './common/auth/auth.guard';
@@ -74,6 +75,7 @@ import { TelemetryService } from './telemetry/telemetry.service';
     AccountsModule,
     CategoriesModule,
     TransactionsModule,
+    CreditCardsModule,
   ],
   providers: [
     TelemetryService,
