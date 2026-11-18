@@ -390,4 +390,232 @@ describe('E2E | Transações: criação, consistência de movimentos, idempotên
     });
     expect(tentativaDoViewer.status).toBe(403);
   });
+
+  it('estorna uma despesa criando a transacao de compensacao vinculada e auditada', async () => {
+    const user = await bootstrapUser(app);
+    const conta = await createAccount(app, user.accessToken, user.spaceId);
+
+    const original = await createTransaction(app, user.accessToken, user.spaceId, {
+      type: 'expense',
+      description: 'Compra duplicada',
+      totalAmount: '250.75',
+      effectiveDate: `${MES}-10`,
+      postings: [{ accountId: conta.id, amount: '250.75', direction: 'credit' }],
+    });
+    expect(original.status).toBe(201);
+
+    const res = await api(app)
+      .post(`/api/v1/financial-spaces/${user.spaceId}/transactions/${original.body.id}/reverse`)
+      .set(auth(user.accessToken))
+      .send({ reason: 'Lançamento em duplicidade' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.type).toBe('expense');
+    expect(res.body.status).toBe('confirmed');
+    expect(Number(res.body.totalAmount)).toBe(-250.75);
+    expect(res.body.reversalOfTransactionId).toBe(original.body.id);
+    expect(res.body.reversalReason).toBe('Lançamento em duplicidade');
+    expect(res.body.description).toContain('Estorno');
+    expect(res.body.reversalOfTransaction.id).toBe(original.body.id);
+
+    // O movimento e o espelho do original: credito vira debito, mesma conta.
+    expect(res.body.postings).toHaveLength(1);
+    expect(res.body.postings[0].direction).toBe('debit');
+    expect(res.body.postings[0].accountId).toBe(conta.id);
+
+    // O original permanece confirmado (e nos totais), apenas marcado como estornado.
+    const originalNoBanco = await prisma.transaction.findUnique({ where: { id: original.body.id } });
+    expect(originalNoBanco?.status).toBe('confirmed');
+    expect(originalNoBanco?.reversedAt).not.toBeNull();
+
+    const auditoria = await prisma.auditLog.count({
+      where: { entityId: original.body.id, operation: 'transaction.reverse' },
+    });
+    expect(auditoria).toBe(1);
+  });
+
+  it('espelha os movimentos ao estornar uma transferência', async () => {
+    const user = await bootstrapUser(app);
+    const origem = await createAccount(app, user.accessToken, user.spaceId, { name: 'Origem' });
+    const destino = await createAccount(app, user.accessToken, user.spaceId, { name: 'Destino' });
+
+    const original = await createTransaction(app, user.accessToken, user.spaceId, {
+      type: 'transfer',
+      description: 'Aporte na poupança',
+      totalAmount: '500.00',
+      effectiveDate: `${MES}-11`,
+      postings: [
+        { accountId: origem.id, amount: '500.00', direction: 'credit' },
+        { accountId: destino.id, amount: '500.00', direction: 'debit' },
+      ],
+    });
+    expect(original.status).toBe(201);
+
+    const res = await api(app)
+      .post(`/api/v1/financial-spaces/${user.spaceId}/transactions/${original.body.id}/reverse`)
+      .set(auth(user.accessToken))
+      .send({})
+      .expect(201);
+
+    expect(res.body.postings).toHaveLength(2);
+    const origemReversa = res.body.postings.find((p: { accountId: string }) => p.accountId === origem.id);
+    const destinoReversa = res.body.postings.find((p: { accountId: string }) => p.accountId === destino.id);
+    expect(origemReversa.direction).toBe('debit');
+    expect(destinoReversa.direction).toBe('credit');
+  });
+
+  it('zera o efeito do estorno nos totais do dashboard', async () => {
+    const user = await bootstrapUser(app);
+    const conta = await createAccount(app, user.accessToken, user.spaceId);
+
+    await createTransaction(app, user.accessToken, user.spaceId, {
+      type: 'income',
+      description: 'Receita',
+      totalAmount: '500.00',
+      effectiveDate: `${MES}-05`,
+      postings: [{ accountId: conta.id, amount: '500.00', direction: 'debit' }],
+    }).expect(201);
+
+    const despesa = await createTransaction(app, user.accessToken, user.spaceId, {
+      type: 'expense',
+      description: 'Despesa',
+      totalAmount: '100.00',
+      effectiveDate: `${MES}-10`,
+      postings: [{ accountId: conta.id, amount: '100.00', direction: 'credit' }],
+    });
+
+    const antes = await api(app)
+      .get(`/api/v1/financial-spaces/${user.spaceId}/transactions/summary/dashboard?month=${MES}`)
+      .set(auth(user.accessToken));
+    expect(antes.body.totalExpense).toBe('100.00');
+    expect(antes.body.realizedBalance).toBe('400.00');
+
+    await api(app)
+      .post(`/api/v1/financial-spaces/${user.spaceId}/transactions/${despesa.body.id}/reverse`)
+      .set(auth(user.accessToken))
+      .send({})
+      .expect(201);
+
+    const depois = await api(app)
+      .get(`/api/v1/financial-spaces/${user.spaceId}/transactions/summary/dashboard?month=${MES}`)
+      .set(auth(user.accessToken));
+    expect(depois.body.totalIncome).toBe('500.00');
+    expect(depois.body.totalExpense).toBe('0.00');
+    expect(depois.body.netBalance).toBe('500.00');
+    expect(depois.body.realizedBalance).toBe('500.00');
+  });
+
+  it('recusa estornar a mesma transação duas vezes (ALREADY_REVERSED)', async () => {
+    const user = await bootstrapUser(app);
+    const conta = await createAccount(app, user.accessToken, user.spaceId);
+
+    const original = await createTransaction(app, user.accessToken, user.spaceId, {
+      type: 'expense',
+      description: 'Assinatura',
+      totalAmount: '39.90',
+      effectiveDate: `${MES}-20`,
+      postings: [{ accountId: conta.id, amount: '39.90', direction: 'credit' }],
+    });
+
+    await api(app)
+      .post(`/api/v1/financial-spaces/${user.spaceId}/transactions/${original.body.id}/reverse`)
+      .set(auth(user.accessToken))
+      .send({})
+      .expect(201);
+
+    const segunda = await api(app)
+      .post(`/api/v1/financial-spaces/${user.spaceId}/transactions/${original.body.id}/reverse`)
+      .set(auth(user.accessToken))
+      .send({});
+    expect(segunda.status).toBe(400);
+    expect(segunda.body.code).toBe('ALREADY_REVERSED');
+
+    // Nenhuma transacao de estorno duplicada foi criada.
+    const count = await prisma.transaction.count({ where: { financialSpaceId: user.spaceId } });
+    expect(count).toBe(2);
+  });
+
+  it('recusa estornar uma transação que já é um estorno (CANNOT_REVERSE_REVERSAL)', async () => {
+    const user = await bootstrapUser(app);
+    const conta = await createAccount(app, user.accessToken, user.spaceId);
+
+    const original = await createTransaction(app, user.accessToken, user.spaceId, {
+      type: 'income',
+      description: 'Freelance',
+      totalAmount: '800.00',
+      effectiveDate: `${MES}-06`,
+      postings: [{ accountId: conta.id, amount: '800.00', direction: 'debit' }],
+    });
+
+    const estorno = await api(app)
+      .post(`/api/v1/financial-spaces/${user.spaceId}/transactions/${original.body.id}/reverse`)
+      .set(auth(user.accessToken))
+      .send({})
+      .expect(201);
+
+    const res = await api(app)
+      .post(`/api/v1/financial-spaces/${user.spaceId}/transactions/${estorno.body.id}/reverse`)
+      .set(auth(user.accessToken))
+      .send({});
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('CANNOT_REVERSE_REVERSAL');
+  });
+
+  it('recusa estornar transação cancelada (INVALID_TRANSACTION_STATUS)', async () => {
+    const user = await bootstrapUser(app);
+    const conta = await createAccount(app, user.accessToken, user.spaceId);
+
+    const original = await createTransaction(app, user.accessToken, user.spaceId, {
+      type: 'expense',
+      description: 'Cancelada',
+      totalAmount: '10.00',
+      effectiveDate: `${MES}-08`,
+      postings: [{ accountId: conta.id, amount: '10.00', direction: 'credit' }],
+    });
+
+    await api(app)
+      .delete(`/api/v1/financial-spaces/${user.spaceId}/transactions/${original.body.id}`)
+      .set(auth(user.accessToken))
+      .expect(200);
+
+    const res = await api(app)
+      .post(`/api/v1/financial-spaces/${user.spaceId}/transactions/${original.body.id}/reverse`)
+      .set(auth(user.accessToken))
+      .send({});
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('INVALID_TRANSACTION_STATUS');
+  });
+
+  it('bloqueia viewer e isola o estorno entre espaços financeiros', async () => {
+    const dono = await bootstrapUser(app);
+    const viewer = await registerUser(app);
+    const conta = await createAccount(app, dono.accessToken, dono.spaceId);
+
+    await api(app)
+      .post(`/api/v1/financial-spaces/${dono.spaceId}/members`)
+      .set(auth(dono.accessToken))
+      .send({ email: viewer.email, role: 'viewer' })
+      .expect(201);
+
+    const original = await createTransaction(app, dono.accessToken, dono.spaceId, {
+      type: 'expense',
+      description: 'Protegida',
+      totalAmount: '15.00',
+      effectiveDate: `${MES}-09`,
+      postings: [{ accountId: conta.id, amount: '15.00', direction: 'credit' }],
+    });
+
+    const tentativaDoViewer = await api(app)
+      .post(`/api/v1/financial-spaces/${dono.spaceId}/transactions/${original.body.id}/reverse`)
+      .set(auth(viewer.accessToken))
+      .send({});
+    expect(tentativaDoViewer.status).toBe(403);
+
+    const estranho = await bootstrapUser(app);
+    const tentativaDeOutro = await api(app)
+      .post(`/api/v1/financial-spaces/${estranho.spaceId}/transactions/${original.body.id}/reverse`)
+      .set(auth(estranho.accessToken))
+      .send({});
+    expect(tentativaDeOutro.status).toBe(404);
+  });
 });

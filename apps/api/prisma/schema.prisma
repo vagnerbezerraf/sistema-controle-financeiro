@@ -222,10 +222,19 @@ model Transaction {
   updatedAt        DateTime             @updatedAt
   idempotencyKey   String?
 
+  // Estorno formalizado: quando a transacao e revertida, `reversedAt` marca o
+  // momento. A transacao de estorno aponta de volta via
+  // `reversalOfTransactionId` (unico), e o original expoe `reversedByTransaction`.
+  reversedAt              DateTime?
+  reversalReason          String?
+  reversalOfTransactionId String?              @unique
+
   financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
   category       Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   postings       Posting[]
   reconciledObligation Obligation? @relation("ObligationReconciliation")
+  reversalOfTransaction Transaction? @relation("TransactionReversal", fields: [reversalOfTransactionId], references: [id], onDelete: SetNull)
+  reversedByTransaction Transaction? @relation("TransactionReversal")
 
   @@unique([financialSpaceId, idempotencyKey])
   @@index([financialSpaceId, effectiveDate, status, type])

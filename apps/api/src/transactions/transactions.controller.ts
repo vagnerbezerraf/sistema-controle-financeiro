@@ -17,8 +17,10 @@ import {
   JwtAuthGuard,
   Roles,
   SpaceRoleGuard,
+  CurrentUser,
+  type AuthenticatedUser,
 } from '../common/auth/auth.guard';
-import { CreateTransactionRequest } from './http/dto';
+import { CreateTransactionRequest, ReverseTransactionRequest } from './http/dto';
 import { toDate } from '../common/utils/date';
 
 @ApiTags('transactions')
@@ -153,6 +155,110 @@ export class TransactionsController {
     const trx = await this.prisma.transaction.findUnique({ where: { id: transactionId, financialSpaceId: spaceId } });
     if (!trx) throw new NotFoundException('Transacao nao encontrada');
     return this.prisma.transaction.update({ where: { id: transactionId }, data: { status: 'canceled' } });
+  }
+
+  @Post(':transactionId/reverse')
+  @Roles(['owner', 'admin', 'contributor'])
+  @ApiOperation({ summary: 'Estornar transacao (cria transacao de estorno vinculada)' })
+  async reverse(
+    @Param('spaceId') spaceId: string,
+    @Param('transactionId') transactionId: string,
+    @Body() body: ReverseTransactionRequest,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<Transaction> {
+    const original = await this.prisma.transaction.findUnique({
+      where: { id: transactionId, financialSpaceId: spaceId },
+      include: { postings: true },
+    });
+    if (!original) throw new NotFoundException('Transacao nao encontrada');
+    if (original.status !== 'confirmed') {
+      throw new BadRequestException({
+        code: 'INVALID_TRANSACTION_STATUS',
+        message: 'Somente transacoes confirmadas podem ser estornadas',
+      });
+    }
+    if (original.reversalOfTransactionId) {
+      throw new BadRequestException({
+        code: 'CANNOT_REVERSE_REVERSAL',
+        message: 'Uma transacao de estorno nao pode ser estornada',
+      });
+    }
+    if (original.reversedAt) {
+      throw new BadRequestException({
+        code: 'ALREADY_REVERSED',
+        message: 'Transacao ja foi estornada',
+      });
+    }
+
+    // A competencia do estorno e, por padrao, a mesma do original, para que o
+    // efeito nos totais fique zerado no mes correto. Pode ser sobrescrita.
+    const effectiveDate = toDate(body.effectiveDate ?? original.effectiveDate.toISOString().slice(0, 10));
+
+    return this.prisma.$transaction(async (tx) => {
+      // O estorno e uma transacao compensatoria: mesmo tipo do original, valor
+      // negativo e movimentos com a direcao invertida. Assim o efeito liquido
+      // nos totais e nos saldos derivados dos postings fica zerado.
+      const reversal = await tx.transaction.create({
+        data: {
+          financialSpaceId: spaceId,
+          type: original.type,
+          status: 'confirmed',
+          description: `Estorno: ${original.description}`,
+          notes: body.reason,
+          categoryId: original.categoryId,
+          currency: original.currency,
+          totalAmount: original.totalAmount.negated(),
+          effectiveDate,
+          reversalOfTransactionId: original.id,
+          reversalReason: body.reason,
+          postings: {
+            create: original.postings.map((p) => ({
+              accountId: p.accountId,
+              amount: p.amount,
+              direction: p.direction === 'debit' ? 'credit' : 'debit',
+              effectiveDate,
+            })),
+          },
+        },
+        include: {
+          postings: true,
+          reversalOfTransaction: {
+            select: { id: true, description: true, type: true, totalAmount: true, status: true },
+          },
+        },
+      });
+
+      // Marcacao com guarda de concorrencia: so o primeiro estorno "reclama" o
+      // original. Um segundo estorno simultaneo nao encontra a linha livre.
+      const claimed = await tx.transaction.updateMany({
+        where: { id: original.id, financialSpaceId: spaceId, reversedAt: null },
+        data: { reversedAt: new Date() },
+      });
+      if (claimed.count === 0) {
+        throw new BadRequestException({
+          code: 'ALREADY_REVERSED',
+          message: 'Transacao ja foi estornada',
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          financialSpaceId: spaceId,
+          userId: user.sub,
+          operation: 'transaction.reverse',
+          entityType: 'Transaction',
+          entityId: original.id,
+          safeSummary: {
+            reversalTransactionId: reversal.id,
+            description: original.description,
+            totalAmount: original.totalAmount.toString(),
+            reason: body.reason ?? null,
+          },
+        },
+      });
+
+      return reversal;
+    });
   }
 
   @Get('/summary/dashboard')

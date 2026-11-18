@@ -88,3 +88,16 @@ export class CreateTransactionRequest {
   @Type(() => PostingInput)
   postings!: PostingInput[];
 }
+
+export class ReverseTransactionRequest {
+  @ApiProperty({ required: false, example: 'Compra duplicada' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(250)
+  reason?: string;
+
+  @ApiProperty({ required: false, example: '2026-08-21' })
+  @IsOptional()
+  @IsDateString({ strict: true })
+  effectiveDate?: string;
+}
