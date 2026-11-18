@@ -19,6 +19,7 @@ import {
 } from '../common/auth/auth.guard';
 import { CreateAccountRequest, UpdateAccountRequest } from './http/dto';
 import { toDate } from '../common/utils/date';
+import { updateWithOptimisticLock } from '../common/utils/optimistic-lock';
 
 @ApiTags('accounts')
 @Controller('financial-spaces/:spaceId/accounts')
@@ -101,15 +102,27 @@ export class AccountsController {
 
   @Patch(':accountId')
   @Roles(['owner', 'admin', 'contributor'])
-  @ApiOperation({ summary: 'Atualizar conta' })
+  @ApiOperation({ summary: 'Atualizar conta (concorrencia otimista via `version`)' })
   async update(
     @Param('spaceId') spaceId: string,
     @Param('accountId') accountId: string,
     @Body() body: UpdateAccountRequest,
   ): Promise<Account> {
-    return this.prisma.account.update({
-      where: { id: accountId, financialSpaceId: spaceId },
-      data: body,
+    const { version, ...data } = body;
+    const scope = { id: accountId, financialSpaceId: spaceId };
+
+    return updateWithOptimisticLock<Account>({
+      applyConditionalUpdate: async () => {
+        const res = await this.prisma.account.updateMany({
+          where: version === undefined ? scope : { ...scope, version },
+          data: { ...data, version: { increment: 1 } },
+        });
+        return res.count;
+      },
+      exists: async () => (await this.prisma.account.count({ where: scope })) > 0,
+      reload: () => this.prisma.account.findUniqueOrThrow({ where: { id: accountId } }),
+      notFoundMessage: 'Conta nao encontrada',
+      staleMessage: 'Conta foi alterada por outra sessao; recarregue e tente novamente',
     });
   }
 }

@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { CategoryType } from '@prisma/client';
 
@@ -49,4 +49,14 @@ export class UpdateCategoryRequest {
   @IsOptional()
   @IsString()
   icon?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Versao atual da categoria (concorrencia otimista). Se divergir, responde 409 STALE_VERSION.',
+    example: 0,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  version?: number;
 }

@@ -91,12 +91,67 @@ describe('E2E | Contas', () => {
     expect(atualizada.body.state).toBe('archived');
   });
 
+  it('aplica concorrência otimista: aceita a versão corrente, incrementa e rejeita a desatualizada (409)', async () => {
+    const user = await bootstrapUser(app);
+    const conta = await createAccount(app, user.accessToken, user.spaceId, { name: 'Corrente' });
+    const url = `/api/v1/financial-spaces/${user.spaceId}/accounts/${conta.id}`;
+
+    const detalhe = await api(app).get(url).set(auth(user.accessToken));
+    expect(detalhe.body.version).toBe(0);
+
+    const atualizada = await api(app)
+      .patch(url)
+      .set(auth(user.accessToken))
+      .send({ name: 'Corrente nova', version: 0 });
+    expect(atualizada.status).toBe(200);
+    expect(atualizada.body.name).toBe('Corrente nova');
+    expect(atualizada.body.version).toBe(1);
+
+    // Segunda sessão ainda com a versão antiga: conflito, nada é sobrescrito.
+    const desatualizada = await api(app)
+      .patch(url)
+      .set(auth(user.accessToken))
+      .send({ name: 'Escrita perdida', version: 0 });
+    expect(desatualizada.status).toBe(409);
+    expect(desatualizada.body.code).toBe('STALE_VERSION');
+
+    const depois = await api(app).get(url).set(auth(user.accessToken));
+    expect(depois.body.name).toBe('Corrente nova');
+    expect(depois.body.version).toBe(1);
+  });
+
+  it('mantém o PATCH retrocompatível quando a versão não é enviada', async () => {
+    const user = await bootstrapUser(app);
+    const conta = await createAccount(app, user.accessToken, user.spaceId, { name: 'Legado' });
+
+    const res = await api(app)
+      .patch(`/api/v1/financial-spaces/${user.spaceId}/accounts/${conta.id}`)
+      .set(auth(user.accessToken))
+      .send({ name: 'Sem versão' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('Sem versão');
+    // Sem versão enviada a checagem é ignorada, mas o contador continua avançando.
+    expect(res.body.version).toBe(1);
+  });
+
   it('retorna 404 para conta inexistente no espaço informado', async () => {
     const user = await bootstrapUser(app);
 
     const res = await api(app)
       .get(`/api/v1/financial-spaces/${user.spaceId}/accounts/00000000-0000-0000-0000-000000000000`)
       .set(auth(user.accessToken));
+
+    expect(res.status).toBe(404);
+  });
+
+  it('retorna 404 (e não 409) ao atualizar conta inexistente', async () => {
+    const user = await bootstrapUser(app);
+
+    const res = await api(app)
+      .patch(`/api/v1/financial-spaces/${user.spaceId}/accounts/00000000-0000-0000-0000-000000000000`)
+      .set(auth(user.accessToken))
+      .send({ name: 'Fantasma', version: 0 });
 
     expect(res.status).toBe(404);
   });

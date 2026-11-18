@@ -1,4 +1,4 @@
-import { IsDateString, IsEnum, IsNumberString, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsDateString, IsEnum, IsInt, IsNumberString, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { AccountType, CurrencyCode, EntityState } from '@prisma/client';
 
@@ -89,4 +89,14 @@ export class UpdateAccountRequest {
   @IsOptional()
   @IsEnum(EntityState)
   state?: EntityState;
+
+  @ApiProperty({
+    required: false,
+    description: 'Versao atual da conta (concorrencia otimista). Se divergir, responde 409 STALE_VERSION.',
+    example: 0,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  version?: number;
 }

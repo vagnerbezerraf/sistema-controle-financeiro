@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { CurrencyCode, FinancialSpaceState, FinancialSpaceRole } from '@prisma/client';
 
@@ -40,6 +40,16 @@ export class UpdateFinancialSpaceRequest {
   @IsOptional()
   @IsEnum(FinancialSpaceState)
   state?: FinancialSpaceState;
+
+  @ApiProperty({
+    required: false,
+    description: 'Versao atual do espaco (concorrencia otimista). Se divergir, responde 409 STALE_VERSION.',
+    example: 0,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  version?: number;
 }
 
 export class InviteMemberRequest {

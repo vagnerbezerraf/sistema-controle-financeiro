@@ -192,6 +192,7 @@ model Category {
   state            EntityState          @default(active)
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
+  version          Int                  @default(0)
 
   financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
   parent         Category?      @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)

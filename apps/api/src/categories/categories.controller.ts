@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  NotFoundException,
   Param,
   Patch,
   Post,
@@ -16,6 +15,7 @@ import {
   SpaceRoleGuard,
 } from '../common/auth/auth.guard';
 import { CreateCategoryRequest, UpdateCategoryRequest } from './http/dto';
+import { updateWithOptimisticLock } from '../common/utils/optimistic-lock';
 
 const DEFAULT_CATEGORIES: Array<{ name: string; type: 'income' | 'expense' | 'both'; color: string; icon?: string }> = [
   { name: 'Salario', type: 'income', color: '#158441', icon: 'wallet' },
@@ -78,14 +78,27 @@ export class CategoriesController {
 
   @Patch(':categoryId')
   @Roles(['owner', 'admin', 'contributor'])
-  @ApiOperation({ summary: 'Atualizar categoria' })
+  @ApiOperation({ summary: 'Atualizar categoria (concorrencia otimista via `version`)' })
   async update(
     @Param('spaceId') spaceId: string,
     @Param('categoryId') categoryId: string,
     @Body() body: UpdateCategoryRequest,
   ): Promise<Category> {
-    const cat = await this.prisma.category.findUnique({ where: { id: categoryId, financialSpaceId: spaceId } });
-    if (!cat) throw new NotFoundException('Categoria nao encontrada');
-    return this.prisma.category.update({ where: { id: categoryId }, data: body });
+    const { version, ...data } = body;
+    const scope = { id: categoryId, financialSpaceId: spaceId };
+
+    return updateWithOptimisticLock<Category>({
+      applyConditionalUpdate: async () => {
+        const res = await this.prisma.category.updateMany({
+          where: version === undefined ? scope : { ...scope, version },
+          data: { ...data, version: { increment: 1 } },
+        });
+        return res.count;
+      },
+      exists: async () => (await this.prisma.category.count({ where: scope })) > 0,
+      reload: () => this.prisma.category.findUniqueOrThrow({ where: { id: categoryId } }),
+      notFoundMessage: 'Categoria nao encontrada',
+      staleMessage: 'Categoria foi alterada por outra sessao; recarregue e tente novamente',
+    });
   }
 }

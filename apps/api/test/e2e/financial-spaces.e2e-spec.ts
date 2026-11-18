@@ -66,6 +66,28 @@ describe('E2E | Espaços financeiros e membros', () => {
     expect(naoEncontrado.status).toBe(403);
   });
 
+  it('aplica concorrência otimista no espaço financeiro (409 STALE_VERSION)', async () => {
+    const user = await bootstrapUser(app);
+    const url = `/api/v1/financial-spaces/${user.spaceId}`;
+
+    const detalhe = await api(app).get(url).set(auth(user.accessToken));
+    expect(detalhe.body.version).toBe(0);
+
+    const atualizado = await api(app)
+      .patch(url)
+      .set(auth(user.accessToken))
+      .send({ name: 'Renomeado', version: 0 });
+    expect(atualizado.status).toBe(200);
+    expect(atualizado.body.version).toBe(1);
+
+    const desatualizado = await api(app)
+      .patch(url)
+      .set(auth(user.accessToken))
+      .send({ name: 'Escrita perdida', version: 0 });
+    expect(desatualizado.status).toBe(409);
+    expect(desatualizado.body.code).toBe('STALE_VERSION');
+  });
+
   it('isola os espaços entre usuários: acesso cruzado retorna 403', async () => {
     const dono = await bootstrapUser(app);
     const outro = await bootstrapUser(app);

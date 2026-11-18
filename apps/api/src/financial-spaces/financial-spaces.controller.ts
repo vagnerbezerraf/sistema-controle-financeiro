@@ -22,6 +22,7 @@ import {
   InviteMemberRequest,
   UpdateFinancialSpaceRequest,
 } from './http/dto';
+import { updateWithOptimisticLock } from '../common/utils/optimistic-lock';
 
 @ApiTags('financial-spaces')
 @Controller('financial-spaces')
@@ -77,9 +78,24 @@ export class FinancialSpacesController {
   @Patch(':spaceId')
   @UseGuards(SpaceRoleGuard)
   @Roles([FinancialSpaceRole.owner, FinancialSpaceRole.admin])
-  @ApiOperation({ summary: 'Atualizar espaco financeiro' })
+  @ApiOperation({ summary: 'Atualizar espaco financeiro (concorrencia otimista via `version`)' })
   async update(@Param('spaceId') spaceId: string, @Body() body: UpdateFinancialSpaceRequest): Promise<FinancialSpace> {
-    return this.prisma.financialSpace.update({ where: { id: spaceId }, data: body });
+    const { version, ...data } = body;
+    const scope = { id: spaceId };
+
+    return updateWithOptimisticLock<FinancialSpace>({
+      applyConditionalUpdate: async () => {
+        const res = await this.prisma.financialSpace.updateMany({
+          where: version === undefined ? scope : { ...scope, version },
+          data: { ...data, version: { increment: 1 } },
+        });
+        return res.count;
+      },
+      exists: async () => (await this.prisma.financialSpace.count({ where: scope })) > 0,
+      reload: () => this.prisma.financialSpace.findUniqueOrThrow({ where: { id: spaceId } }),
+      notFoundMessage: 'Espaco financeiro nao encontrado',
+      staleMessage: 'Espaco financeiro foi alterado por outra sessao; recarregue e tente novamente',
+    });
   }
 
   @Get(':spaceId/members')
