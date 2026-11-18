@@ -9,10 +9,12 @@ import {
   Param,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { PrismaClient, Transaction } from '@prisma/client';
+import { Prisma, PrismaClient, Transaction, TransactionStatus, TransactionType } from '@prisma/client';
 import {
   JwtAuthGuard,
   Roles,
@@ -22,6 +24,16 @@ import {
 } from '../common/auth/auth.guard';
 import { CreateTransactionRequest, ReverseTransactionRequest } from './http/dto';
 import { toDate } from '../common/utils/date';
+import { toCsv } from '../common/utils/csv';
+
+/** Teto de linhas da exportacao, para nao gerar um CSV ilimitado. */
+const EXPORT_ROW_LIMIT = 10_000;
+
+/** Nome do arquivo baixado, derivado do periodo filtrado. */
+function exportFileName(from?: string, to?: string): string {
+  const range = [from, to].filter(Boolean).join('_');
+  return range ? `transacoes-${range}.csv` : 'transacoes.csv';
+}
 
 @ApiTags('transactions')
 @Controller('financial-spaces/:spaceId/transactions')
@@ -46,15 +58,7 @@ export class TransactionsController {
     @Query('q') q?: string,
   ) {
     const limit = Math.min(Number(limitParam ?? 50), 200);
-    const where: any = { financialSpaceId: spaceId };
-    if (from || to) where.effectiveDate = {};
-    if (from) where.effectiveDate.gte = toDate(from);
-    if (to) where.effectiveDate.lte = toDate(to);
-    if (type) where.type = type;
-    if (status) where.status = status;
-    if (accountId) where.postings = { some: { accountId } };
-    if (categoryId) where.categoryId = categoryId;
-    if (q) where.OR = [{ description: { contains: q, mode: 'insensitive' } }, { notes: { contains: q, mode: 'insensitive' } }];
+    const where = this.buildTransactionFilter(spaceId, { from, to, type, status, accountId, categoryId, q });
     if (cursor) where.id = { lt: cursor };
 
     const [items, total] = await Promise.all([
@@ -73,6 +77,51 @@ export class TransactionsController {
       total,
       nextCursor: hasNext ? returned[returned.length - 1].id : undefined,
     };
+  }
+
+  @Get('export')
+  @Roles(['owner', 'admin', 'contributor', 'viewer'])
+  @ApiOperation({ summary: 'Exportar transacoes em CSV (mesmos filtros da listagem)' })
+  async export(
+    @Param('spaceId') spaceId: string,
+    @Res({ passthrough: true }) res: Response,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('type') type?: string,
+    @Query('status') status?: string,
+    @Query('accountId') accountId?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('q') q?: string,
+  ): Promise<string> {
+    const where = this.buildTransactionFilter(spaceId, { from, to, type, status, accountId, categoryId, q });
+    const items = await this.prisma.transaction.findMany({
+      where,
+      orderBy: [{ effectiveDate: 'desc' }, { createdAt: 'desc' }],
+      take: EXPORT_ROW_LIMIT,
+      include: {
+        category: { select: { name: true } },
+        postings: { include: { account: { select: { name: true } } } },
+      },
+    });
+
+    const rows: Array<Array<unknown>> = [
+      ['data', 'tipo', 'situacao', 'descricao', 'categoria', 'contas', 'valor', 'moeda'],
+      ...items.map((t) => [
+        t.effectiveDate.toISOString().slice(0, 10),
+        t.type,
+        t.status,
+        t.description,
+        t.category?.name ?? '',
+        t.postings.map((p) => p.account.name).join(' | '),
+        t.totalAmount.toFixed(2),
+        t.currency,
+      ]),
+    ];
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${exportFileName(from, to)}"`);
+    // O BOM faz o Excel reconhecer o UTF-8 e exibir os acentos corretamente.
+    return `\uFEFF${toCsv(rows)}`;
   }
 
   @Post()
@@ -315,6 +364,39 @@ export class TransactionsController {
       upcomingDueCount: upcoming.length,
       upcomingDueAmount: upcoming.filter((t) => t.type === 'expense').reduce((acc, t) => acc + Number(t.totalAmount), 0).toFixed(2),
     };
+  }
+
+  /** Filtro compartilhado entre a listagem paginada e a exportacao em CSV. */
+  private buildTransactionFilter(
+    spaceId: string,
+    f: {
+      from?: string;
+      to?: string;
+      type?: string;
+      status?: string;
+      accountId?: string;
+      categoryId?: string;
+      q?: string;
+    },
+  ): Prisma.TransactionWhereInput {
+    const where: Prisma.TransactionWhereInput = { financialSpaceId: spaceId };
+    if (f.from || f.to) {
+      where.effectiveDate = {
+        ...(f.from ? { gte: toDate(f.from) } : {}),
+        ...(f.to ? { lte: toDate(f.to) } : {}),
+      };
+    }
+    if (f.type) where.type = f.type as TransactionType;
+    if (f.status) where.status = f.status as TransactionStatus;
+    if (f.accountId) where.postings = { some: { accountId: f.accountId } };
+    if (f.categoryId) where.categoryId = f.categoryId;
+    if (f.q) {
+      where.OR = [
+        { description: { contains: f.q, mode: 'insensitive' } },
+        { notes: { contains: f.q, mode: 'insensitive' } },
+      ];
+    }
+    return where;
   }
 
   private validatePostings(body: CreateTransactionRequest) {

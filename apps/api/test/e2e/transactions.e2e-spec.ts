@@ -618,4 +618,92 @@ describe('E2E | Transações: criação, consistência de movimentos, idempotên
       .send({});
     expect(tentativaDeOutro.status).toBe(404);
   });
+
+  it('exporta as transações em CSV respeitando o período e os filtros', async () => {
+    const user = await bootstrapUser(app);
+    const conta = await createAccount(app, user.accessToken, user.spaceId, { name: 'Conta E2E' });
+
+    await createTransaction(app, user.accessToken, user.spaceId, {
+      type: 'income',
+      description: 'Salario março',
+      totalAmount: '1000.00',
+      effectiveDate: `${MES}-05`,
+      postings: [{ accountId: conta.id, amount: '1000.00', direction: 'debit' }],
+    }).expect(201);
+
+    await createTransaction(app, user.accessToken, user.spaceId, {
+      type: 'expense',
+      description: 'Mercado',
+      totalAmount: '250.75',
+      effectiveDate: `${MES}-10`,
+      postings: [{ accountId: conta.id, amount: '250.75', direction: 'credit' }],
+    }).expect(201);
+
+    // Fora do período: não pode aparecer no CSV filtrado.
+    await createTransaction(app, user.accessToken, user.spaceId, {
+      type: 'expense',
+      description: 'Fora do período',
+      totalAmount: '99.00',
+      effectiveDate: '2026-04-01',
+      postings: [{ accountId: conta.id, amount: '99.00', direction: 'credit' }],
+    }).expect(201);
+
+    const res = await api(app)
+      .get(`/api/v1/financial-spaces/${user.spaceId}/transactions/export?from=${MES}-01&to=${MES}-31`)
+      .set(auth(user.accessToken));
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    expect(res.headers['content-disposition']).toContain('transacoes-2026-03-01_2026-03-31.csv');
+    // BOM para o Excel reconhecer o UTF-8.
+    expect(res.text.startsWith('\uFEFF')).toBe(true);
+
+    const [cabecalho, ...corpo] = res.text.replace('\uFEFF', '').trim().split('\r\n');
+    expect(cabecalho).toBe('data,tipo,situacao,descricao,categoria,contas,valor,moeda');
+    expect(corpo).toHaveLength(2);
+    // Ordenado por data desc: a despesa de 10/03 vem antes da receita de 05/03.
+    expect(corpo[0].split(',')).toEqual([
+      '2026-03-10', 'expense', 'confirmed', 'Mercado', '', 'Conta E2E', '250.75', 'BRL',
+    ]);
+    expect(corpo[1].split(',')).toEqual([
+      '2026-03-05', 'income', 'confirmed', 'Salario março', '', 'Conta E2E', '1000.00', 'BRL',
+    ]);
+
+    // Filtro por tipo reaproveitado da listagem.
+    const apenasDespesas = await api(app)
+      .get(`/api/v1/financial-spaces/${user.spaceId}/transactions/export?from=${MES}-01&to=${MES}-31&type=expense`)
+      .set(auth(user.accessToken));
+    expect(apenasDespesas.text.replace('\uFEFF', '').trim().split('\r\n')).toHaveLength(2);
+  });
+
+  it('escapa vírgulas e aspas nos campos do CSV', async () => {
+    const user = await bootstrapUser(app);
+    const conta = await createAccount(app, user.accessToken, user.spaceId);
+
+    await createTransaction(app, user.accessToken, user.spaceId, {
+      type: 'expense',
+      description: 'Compra "promocional", com vírgula',
+      totalAmount: '12.50',
+      effectiveDate: `${MES}-07`,
+      postings: [{ accountId: conta.id, amount: '12.50', direction: 'credit' }],
+    }).expect(201);
+
+    const res = await api(app)
+      .get(`/api/v1/financial-spaces/${user.spaceId}/transactions/export?from=${MES}-01&to=${MES}-31`)
+      .set(auth(user.accessToken));
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('"Compra ""promocional"", com vírgula"');
+  });
+
+  it('isola a exportação entre espaços financeiros (403)', async () => {
+    const dono = await bootstrapUser(app);
+    const outro = await bootstrapUser(app);
+
+    const res = await api(app)
+      .get(`/api/v1/financial-spaces/${dono.spaceId}/transactions/export`)
+      .set(auth(outro.accessToken));
+
+    expect(res.status).toBe(403);
+  });
 });
