@@ -2,7 +2,12 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { KeyRound, ShieldCheck, ShieldOff, Copy, Check } from 'lucide-react';
+import { BellRing, KeyRound, ShieldCheck, ShieldOff, Copy, Check } from 'lucide-react';
+import type {
+  NotificationChannel,
+  NotificationPreferences,
+  NotificationType,
+} from '@scf/api-contracts';
 import { apiFetch } from '@/lib/api-client';
 
 interface MeResponse {
@@ -18,6 +23,28 @@ interface MfaSetup {
 
 type Phase = 'idle' | 'setup' | 'recovery';
 
+const NOTIFICATION_TYPES: NotificationType[] = [
+  'upcoming_due',
+  'invoice_due',
+  'budget_threshold',
+  'negative_balance',
+];
+
+const NOTIFICATION_CHANNELS: NotificationChannel[] = ['email', 'push', 'desktop'];
+
+const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
+  upcoming_due: 'Vencimento proximo',
+  invoice_due: 'Fatura proxima do vencimento',
+  budget_threshold: 'Orcamento perto do limite',
+  negative_balance: 'Saldo projetado negativo',
+};
+
+const NOTIFICATION_CHANNEL_LABELS: Record<NotificationChannel, string> = {
+  email: 'E-mail',
+  push: 'Push',
+  desktop: 'Desktop',
+};
+
 export default function SettingsPage() {
   const [mfaEnabled, setMfaEnabled] = useState<boolean | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
@@ -28,11 +55,59 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [prefsNotice, setPrefsNotice] = useState<string | null>(null);
+  const [prefsError, setPrefsError] = useState<string | null>(null);
+
   useEffect(() => {
     apiFetch<MeResponse>('/identity/me')
       .then((me) => setMfaEnabled(Boolean(me.mfaEnabled)))
       .catch(() => setMfaEnabled(false));
   }, []);
+
+  useEffect(() => {
+    apiFetch<NotificationPreferences>('/notification-preferences')
+      .then(setPrefs)
+      .catch(() => setPrefs(null));
+  }, []);
+
+  function toggleChannel(type: NotificationType, channel: NotificationChannel) {
+    setPrefs((current) =>
+      current
+        ? {
+            ...current,
+            channels: {
+              ...current.channels,
+              [type]: { ...current.channels[type], [channel]: !current.channels[type][channel] },
+            },
+          }
+        : current,
+    );
+  }
+
+  async function savePreferences() {
+    if (!prefs) return;
+    setSaving(true);
+    setPrefsNotice(null);
+    setPrefsError(null);
+    try {
+      const saved = await apiFetch<NotificationPreferences>('/notification-preferences', {
+        method: 'PATCH',
+        json: {
+          channels: prefs.channels,
+          quietHours: prefs.quietHours,
+          includeAmounts: prefs.includeAmounts,
+        },
+      });
+      setPrefs(saved);
+      setPrefsNotice('Preferencias salvas.');
+    } catch (e: any) {
+      setPrefsError(e?.details?.message ?? e?.message ?? 'Nao foi possivel salvar as preferencias');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function reset() {
     setCode('');
@@ -108,7 +183,7 @@ export default function SettingsPage() {
             </div>
           </div>
           <div className="card-body space-y-3 text-sm text-neutral-700">
-            <p>As preferencias de perfil e notificacoes serao gerenciadas aqui.</p>
+            <p>Edicao de nome, fuso horario e moeda principal sera disponibilizada nas proximas versoes.</p>
             <p className="text-neutral-500">
               A primeira versao do MVP permite exportar e excluir sua conta via contato de suporte.
             </p>
@@ -232,6 +307,153 @@ export default function SettingsPage() {
               disponibilizadas nas proximas versoes.
             </p>
             <Link href="/app/dashboard" className="btn-outline">Voltar ao dashboard</Link>
+          </div>
+        </section>
+
+        <section className="card md:col-span-2">
+          <div className="card-header">
+            <div className="flex items-center gap-2">
+              <BellRing className="h-5 w-5 text-neutral-500" />
+              <h2 className="card-title text-lg">Notificacoes e privacidade</h2>
+            </div>
+          </div>
+          <div className="card-body space-y-5 text-sm text-neutral-700">
+            {!prefs && <p className="text-neutral-500">Carregando...</p>}
+
+            {prefsNotice && (
+              <div
+                data-testid="notif-sucesso"
+                className="rounded-md border border-success-200 bg-success-50 px-3 py-2 text-sm text-success-700"
+              >
+                {prefsNotice}
+              </div>
+            )}
+            {prefsError && (
+              <div
+                data-testid="notif-erro"
+                className="rounded-md border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700"
+              >
+                {prefsError}
+              </div>
+            )}
+
+            {prefs && (
+              <>
+                <div>
+                  <p className="mb-2 font-medium text-neutral-800">Canais por tipo de notificacao</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm" data-testid="notif-matriz">
+                      <thead>
+                        <tr className="text-left text-neutral-500">
+                          <th className="py-2 pr-4 font-medium">Tipo</th>
+                          {NOTIFICATION_CHANNELS.map((channel) => (
+                            <th key={channel} className="px-3 py-2 font-medium">
+                              {NOTIFICATION_CHANNEL_LABELS[channel]}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {NOTIFICATION_TYPES.map((type) => (
+                          <tr key={type} className="border-t border-neutral-100">
+                            <td className="py-2 pr-4">{NOTIFICATION_TYPE_LABELS[type]}</td>
+                            {NOTIFICATION_CHANNELS.map((channel) => (
+                              <td key={channel} className="px-3 py-2">
+                                <input
+                                  type="checkbox"
+                                  data-testid={`notif-canal-${type}-${channel}`}
+                                  aria-label={`${NOTIFICATION_TYPE_LABELS[type]} por ${NOTIFICATION_CHANNEL_LABELS[channel]}`}
+                                  checked={prefs.channels[type][channel]}
+                                  onChange={() => toggleChannel(type, channel)}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-neutral-200 p-3">
+                  <label className="flex items-center gap-2 font-medium text-neutral-800">
+                    <input
+                      type="checkbox"
+                      data-testid="notif-silencio-ativo"
+                      checked={prefs.quietHours.enabled}
+                      onChange={(e) =>
+                        setPrefs({
+                          ...prefs,
+                          quietHours: { ...prefs.quietHours, enabled: e.target.checked },
+                        })
+                      }
+                    />
+                    Horario silencioso
+                  </label>
+                  <p className="mt-1 text-neutral-500">
+                    Nenhuma notificacao e entregue na janela abaixo, no fuso
+                    {' '}
+                    <span className="font-mono">{prefs.timezone}</span>.
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-end gap-3">
+                    <div>
+                      <label htmlFor="quietStart" className="label block">Inicio</label>
+                      <input
+                        id="quietStart"
+                        type="time"
+                        data-testid="notif-silencio-inicio"
+                        className="input mt-1"
+                        value={prefs.quietHours.start}
+                        disabled={!prefs.quietHours.enabled}
+                        onChange={(e) =>
+                          setPrefs({
+                            ...prefs,
+                            quietHours: { ...prefs.quietHours, start: e.target.value },
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="quietEnd" className="label block">Fim</label>
+                      <input
+                        id="quietEnd"
+                        type="time"
+                        data-testid="notif-silencio-fim"
+                        className="input mt-1"
+                        value={prefs.quietHours.end}
+                        disabled={!prefs.quietHours.enabled}
+                        onChange={(e) =>
+                          setPrefs({
+                            ...prefs,
+                            quietHours: { ...prefs.quietHours, end: e.target.value },
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    data-testid="notif-exibir-valores"
+                    checked={prefs.includeAmounts}
+                    onChange={(e) => setPrefs({ ...prefs, includeAmounts: e.target.checked })}
+                  />
+                  Exibir valores nas notificacoes
+                </label>
+
+                <button
+                  type="button"
+                  className="btn-primary"
+                  data-testid="notif-salvar"
+                  onClick={savePreferences}
+                  disabled={saving}
+                >
+                  {saving ? 'Salvando...' : 'Salvar preferencias'}
+                </button>
+              </>
+            )}
           </div>
         </section>
       </div>

@@ -21,7 +21,7 @@ export function uniqueEmail(prefix = 'web.e2e'): string {
 }
 
 /** Dia do mês corrente no fuso do dashboard, no formato `YYYY-MM-DD`. */
-function currentMonthDay(day: number): string {
+export function currentMonthDay(day: number): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: DASHBOARD_TZ,
     year: 'numeric',
@@ -30,6 +30,17 @@ function currentMonthDay(day: number): string {
   const year = parts.find((p) => p.type === 'year')!.value;
   const month = parts.find((p) => p.type === 'month')!.value;
   return `${year}-${month}-${String(day).padStart(2, '0')}`;
+}
+
+/**
+ * Dia (UTC) deslocado em N dias a partir de hoje, no formato `YYYY-MM-DD`.
+ * A API classifica os alertas pela data UTC, então os testes de vencimento
+ * usam o mesmo referencial.
+ */
+export function utcDayOffset(days: number): string {
+  const now = new Date();
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + days));
+  return d.toISOString().slice(0, 10);
 }
 
 export interface SeededUser {
@@ -58,6 +69,21 @@ export interface SeedOptions {
   creditCard?: { name: string; limit?: string; closingDay?: number; dueDay?: number };
   /** Compra lançada na conta técnica do cartão (exige `creditCard`). */
   purchase?: string;
+  /** Contas a pagar/receber avulsas. */
+  obligations?: Array<{ type: 'expense' | 'income'; description: string; amount: string; dueDate: string }>;
+  /** Extratos CSV importados e aplicados (gera um lote por item). */
+  imports?: Array<{ csv: string; fileName?: string }>;
+  /** Recorrências; cada uma materializa as previsões até o horizonte informado. */
+  recurrences?: Array<{
+    type: 'expense' | 'income';
+    description: string;
+    amount: string;
+    frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+    interval?: number;
+    startDate: string;
+    generateUpTo?: string;
+    occurrencesLimit?: number;
+  }>;
 }
 
 interface TransactionBody {
@@ -81,6 +107,64 @@ async function createTransaction(
   });
   if (res.status() !== 201) {
     throw new Error(`Falha ao criar transação (HTTP ${res.status()}): ${await res.text()}`);
+  }
+}
+
+/** Cria um usuário novo pela API e devolve a sessão e o espaço padrão. */
+export async function registerViaApi(prefix = 'web.e2e.convidado'): Promise<SeededUser> {
+  const api = await request.newContext({ baseURL: API_ORIGIN });
+  try {
+    const email = uniqueEmail(prefix);
+    const register = await api.post(`${API_PREFIX}/identity/register`, {
+      data: { email, password: TEST_PASSWORD, name: 'Convidado Web E2E' },
+    });
+    if (register.status() !== 201) {
+      throw new Error(`Falha no cadastro (HTTP ${register.status()}): ${await register.text()}`);
+    }
+    const session = (await register.json()) as { accessToken: string };
+    const headers = { authorization: `Bearer ${session.accessToken}` };
+
+    const spaces = await api.get(`${API_PREFIX}/financial-spaces`, { headers });
+    const spaceId = ((await spaces.json()) as Array<{ id: string }>)[0].id;
+
+    const account = await api.post(`${API_PREFIX}/financial-spaces/${spaceId}/accounts`, {
+      headers,
+      data: { name: 'Conta E2E', type: 'checking' },
+    });
+    const accountId = ((await account.json()) as { id: string }).id;
+
+    return { email, password: TEST_PASSWORD, accessToken: session.accessToken, spaceId, accountId };
+  } finally {
+    await api.dispose();
+  }
+}
+
+export interface InvitedMember {
+  inviteId: string;
+  token: string;
+  acceptUrl: string;
+}
+
+/** Convida um e-mail para o espaço e devolve o token/link do convite. */
+export async function inviteMemberViaApi(
+  ownerToken: string,
+  spaceId: string,
+  email: string,
+  role: 'admin' | 'contributor' | 'viewer' = 'contributor',
+): Promise<InvitedMember> {
+  const api = await request.newContext({ baseURL: API_ORIGIN });
+  try {
+    const res = await api.post(`${API_PREFIX}/financial-spaces/${spaceId}/invites`, {
+      headers: { authorization: `Bearer ${ownerToken}` },
+      data: { email, role },
+    });
+    if (res.status() !== 201) {
+      throw new Error(`Falha ao convidar (HTTP ${res.status()}): ${await res.text()}`);
+    }
+    const body = (await res.json()) as { invite: { id: string }; token: string; acceptUrl: string };
+    return { inviteId: body.invite.id, token: body.token, acceptUrl: body.acceptUrl };
+  } finally {
+    await api.dispose();
   }
 }
 
@@ -164,6 +248,51 @@ export async function seedUser(options: SeedOptions = {}): Promise<SeededUser> {
           effectiveDate: currentMonthDay(5),
           postings: [{ accountId: card.accountId, amount: options.purchase, direction: 'credit' }],
         });
+      }
+    }
+
+    for (const obligation of options.obligations ?? []) {
+      const res = await api.post(`${API_PREFIX}/financial-spaces/${spaceId}/obligations`, {
+        headers,
+        data: obligation,
+      });
+      if (res.status() !== 201) {
+        throw new Error(`Falha ao criar conta (HTTP ${res.status()}): ${await res.text()}`);
+      }
+    }
+
+    for (const item of options.imports ?? []) {
+      const previewRes = await api.post(`${API_PREFIX}/financial-spaces/${spaceId}/imports/preview`, {
+        headers,
+        data: { csv: item.csv, accountId, ...(item.fileName ? { fileName: item.fileName } : {}) },
+      });
+      if (previewRes.status() !== 201) {
+        throw new Error(`Falha na previa da importacao (HTTP ${previewRes.status()}): ${await previewRes.text()}`);
+      }
+      const batchId = ((await previewRes.json()) as { batch: { id: string } }).batch.id;
+      const commitRes = await api.post(`${API_PREFIX}/financial-spaces/${spaceId}/imports/${batchId}/commit`, {
+        headers,
+      });
+      if (commitRes.status() !== 201) {
+        throw new Error(`Falha ao aplicar a importacao (HTTP ${commitRes.status()}): ${await commitRes.text()}`);
+      }
+    }
+
+    for (const rule of options.recurrences ?? []) {
+      const { type, description, amount, frequency, interval, startDate, generateUpTo, occurrencesLimit } = rule;
+      const res = await api.post(`${API_PREFIX}/financial-spaces/${spaceId}/recurrences`, {
+        headers,
+        data: {
+          frequency,
+          startDate,
+          template: { type, description, amount },
+          ...(interval ? { interval } : {}),
+          ...(generateUpTo ? { generateUpTo } : {}),
+          ...(occurrencesLimit ? { occurrencesLimit } : {}),
+        },
+      });
+      if (res.status() !== 201) {
+        throw new Error(`Falha ao criar recorrência (HTTP ${res.status()}): ${await res.text()}`);
       }
     }
 

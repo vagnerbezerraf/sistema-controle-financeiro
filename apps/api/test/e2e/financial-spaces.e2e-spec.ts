@@ -110,46 +110,42 @@ describe('E2E | Espaços financeiros e membros', () => {
     expect(tentativaDeEdicao.status).toBe(403);
   });
 
-  it('convida um usuário existente e libera o acesso ao espaço compartilhado', async () => {
+  it('libera a leitura do espaço a um convidado que aceitou o convite', async () => {
     const dono = await bootstrapUser(app);
-    const convidado = await bootstrapUser(app);
+    const convidado = await registerUser(app);
 
-    const invite = await api(app)
-      .post(`/api/v1/financial-spaces/${dono.spaceId}/members`)
+    const convite = await api(app)
+      .post(`/api/v1/financial-spaces/${dono.spaceId}/invites`)
       .set(auth(dono.accessToken))
       .send({ email: convidado.email, role: 'contributor' });
-    expect(invite.status).toBe(201);
-    expect(invite.body.role).toBe('contributor');
-    expect(invite.body.status).toBe('active');
+    expect(convite.status).toBe(201);
 
-    const membros = await api(app)
-      .get(`/api/v1/financial-spaces/${dono.spaceId}/members`)
-      .set(auth(dono.accessToken));
-    expect(membros.status).toBe(200);
-    expect(membros.body).toHaveLength(2);
+    const aceite = await api(app)
+      .post('/api/v1/space-invites/accept')
+      .set(auth(convidado.accessToken))
+      .send({ token: convite.body.token });
+    expect(aceite.status).toBe(201);
 
-    // O novo membro passa a enxergar o espaço e a criar transações nele.
+    // O novo membro passa a enxergar o espaço compartilhado.
     const acessoDoConvidado = await api(app)
       .get(`/api/v1/financial-spaces/${dono.spaceId}`)
       .set(auth(convidado.accessToken));
     expect(acessoDoConvidado.status).toBe(200);
   });
 
-  it('bloqueia convite e edição para papéis sem permissão', async () => {
+  it('bloqueia a edição para papéis sem permissão, mantendo a leitura', async () => {
     const dono = await bootstrapUser(app);
     const convidado = await registerUser(app);
 
-    await api(app)
-      .post(`/api/v1/financial-spaces/${dono.spaceId}/members`)
+    const convite = await api(app)
+      .post(`/api/v1/financial-spaces/${dono.spaceId}/invites`)
       .set(auth(dono.accessToken))
-      .send({ email: convidado.email, role: 'viewer' })
-      .expect(201);
-
-    const conviteComoViewer = await api(app)
-      .post(`/api/v1/financial-spaces/${dono.spaceId}/members`)
+      .send({ email: convidado.email, role: 'viewer' });
+    await api(app)
+      .post('/api/v1/space-invites/accept')
       .set(auth(convidado.accessToken))
-      .send({ email: dono.email, role: 'admin' });
-    expect(conviteComoViewer.status).toBe(403);
+      .send({ token: convite.body.token })
+      .expect(201);
 
     const edicaoComoViewer = await api(app)
       .patch(`/api/v1/financial-spaces/${dono.spaceId}`)

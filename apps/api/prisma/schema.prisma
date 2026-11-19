@@ -38,6 +38,13 @@ enum MembershipStatus {
   revoked
 }
 
+enum SpaceInviteStatus {
+  pending
+  accepted
+  revoked
+  expired
+}
+
 enum AccountType {
   checking
   savings
@@ -87,6 +94,17 @@ enum ObligationStatus {
   canceled
 }
 
+enum ImportBatchStatus {
+  previewed
+  committed
+  undone
+}
+
+enum ImportBatchFormat {
+  csv
+  ofx
+}
+
 model User {
   id              String       @id @default(uuid())
   email           String       @unique
@@ -104,8 +122,10 @@ model User {
   updatedAt       DateTime     @updatedAt
   lastLoginAt     DateTime?
   memberships     Membership[]
+  spaceInvitesSent SpaceInvite[] @relation("SpaceInvitesSent")
   auditLogs       AuditLog[]
   passwordResetTokens PasswordResetToken[]
+  notificationPreference NotificationPreference?
 
   @@map("users")
 }
@@ -129,6 +149,8 @@ model FinancialSpace {
   outboxEvents    OutboxEvent[]
   recurrenceRules RecurrenceRule[]
   obligations     Obligation[]
+  importBatches   ImportBatch[]
+  invites         SpaceInvite[]
 
   @@unique([id])
   @@map("financial_spaces")
@@ -153,6 +175,28 @@ model Membership {
   @@unique([financialSpaceId, userId])
   @@index([userId, status])
   @@map("memberships")
+}
+
+model SpaceInvite {
+  id               String             @id @default(uuid())
+  financialSpaceId String
+  email            String
+  role             FinancialSpaceRole @default(contributor)
+  status           SpaceInviteStatus  @default(pending)
+  tokenHash        String             @unique
+  invitedById      String
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+  invitedBy      User           @relation("SpaceInvitesSent", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@unique([financialSpaceId, email])
+  @@index([email, status])
+  @@map("space_invites")
 }
 
 model Account {
@@ -312,6 +356,7 @@ model RecurrenceRule {
   template         Json
   timezone         String               @default("America/Sao_Paulo")
   state            EntityState          @default(active)
+  version          Int                  @default(0)
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 
@@ -332,6 +377,7 @@ model Obligation {
   amount           Decimal              @db.Decimal(19, 4)
   dueDate          DateTime             @db.Date
   transactionId    String?              @unique
+  version          Int                  @default(0)
 
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
@@ -340,6 +386,9 @@ model Obligation {
   recurrenceRule      RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
   reconciledTransaction Transaction?  @relation("ObligationReconciliation", fields: [transactionId], references: [id], onDelete: SetNull)
 
+  // Uma ocorrência por regra e vencimento: e o que torna a materializacao das
+  // recorrencias idempotente (a reexecucao nao duplica obrigacoes).
+  @@unique([recurrenceRuleId, dueDate])
   @@index([financialSpaceId, dueDate, status])
   @@map("obligations")
 }
@@ -377,6 +426,34 @@ model Goal {
   financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
 
   @@map("goals")
+}
+
+// Lote de importacao de extrato (CSV ou OFX). Guarda o texto de origem para
+// permitir auditoria e para reexecutar o commit idempotente, e os ids das
+// transacoes criadas para permitir desfazer (cancelamento logico).
+model ImportBatch {
+  id               String            @id @default(uuid())
+  financialSpaceId String
+  accountId        String
+  status           ImportBatchStatus @default(previewed)
+  format           ImportBatchFormat @default(csv)
+  fileName         String?
+  sourceText       String
+  rowCount         Int               @default(0)
+  validCount       Int               @default(0)
+  invalidCount     Int               @default(0)
+  duplicateCount   Int               @default(0)
+  importedCount    Int               @default(0)
+  createdTransactionIds String[]     @default([])
+  committedAt      DateTime?
+  undoneAt         DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+
+  @@index([financialSpaceId, status, createdAt])
+  @@map("import_batches")
 }
 
 model IdempotencyRecord {
@@ -445,4 +522,23 @@ model PasswordResetToken {
 
   @@index([userId])
   @@map("password_reset_tokens")
+}
+
+// Preferencias de notificacao e privacidade do usuario (uma linha por usuario).
+// A matriz de canais por tipo de notificacao fica em JSON para nao exigir uma
+// coluna por combinacao; o dominio normaliza e completa os padroes na leitura.
+model NotificationPreference {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  channels          Json
+  quietHoursEnabled Boolean  @default(false)
+  quietHoursStart   String   @default("22:00")
+  quietHoursEnd     String   @default("07:00")
+  includeAmounts    Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
 }

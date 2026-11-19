@@ -15,6 +15,18 @@ import { AccountsModule } from './accounts/accounts.module';
 import { CategoriesModule } from './categories/categories.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { CreditCardsModule } from './credit-cards/credit-cards.module';
+import { ObligationsModule } from './obligations/obligations.module';
+import { BudgetsModule } from './budgets/budgets.module';
+import { GoalsModule } from './goals/goals.module';
+import { PlanningAlertsModule } from './planning-alerts/planning-alerts.module';
+import { MonthlyComparisonModule } from './monthly-comparison/monthly-comparison.module';
+import { AdvancedReportsModule } from './advanced-reports/advanced-reports.module';
+import { ScenariosModule } from './scenarios/scenario.module';
+import { ImportsModule } from './imports/imports.module';
+import { ReconciliationModule } from './reconciliation/reconciliation.module';
+import { MembersModule } from './members/members.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { OutboxModule } from './outbox/outbox.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { JwtAuthGuard, SpaceRoleGuard } from './common/auth/auth.guard';
@@ -76,6 +88,18 @@ import { TelemetryService } from './telemetry/telemetry.service';
     CategoriesModule,
     TransactionsModule,
     CreditCardsModule,
+    ObligationsModule,
+    BudgetsModule,
+    GoalsModule,
+    PlanningAlertsModule,
+    MonthlyComparisonModule,
+    AdvancedReportsModule,
+    ScenariosModule,
+    ImportsModule,
+    ReconciliationModule,
+    MembersModule,
+    NotificationsModule,
+    OutboxModule,
   ],
   providers: [
     TelemetryService,

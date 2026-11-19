@@ -5,6 +5,7 @@ import DashboardPage from './pages/DashboardPage';
 import TransactionsPage from './pages/TransactionsPage';
 import AccountsPage from './pages/AccountsPage';
 import CardsPage from './pages/CardsPage';
+import ObligationsPage from './pages/ObligationsPage';
 import AppShell from './shell/AppShell';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/transactions" element={<RequireAuth><TransactionsPage /></RequireAuth>} />
         <Route path="/accounts" element={<RequireAuth><AccountsPage /></RequireAuth>} />
         <Route path="/cards" element={<RequireAuth><CardsPage /></RequireAuth>} />
+        <Route path="/obligations" element={<RequireAuth><ObligationsPage /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </AuthProvider>

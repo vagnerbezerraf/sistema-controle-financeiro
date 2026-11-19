@@ -1,0 +1,40 @@
+appId: host.exp.exponent
+---
+- openLink: "exp://10.0.2.2:8081"
+- runFlow: scripts/ensure-logged-in.yaml
+
+# Abre a aba de contas a pagar e cria uma conta avulsa
+- tapOn:
+    id: "tab-obrigacoes"
+- extendedWaitUntil:
+    visible: "Previsoes que nao distorcem o saldo."
+    timeout: 20000
+- assertVisible: "Contas a pagar e receber"
+
+- tapOn:
+    id: "nova-conta"
+- tapOn:
+    id: "conta-descricao"
+- inputText: "IPTU E2E"
+- hideKeyboard
+- tapOn:
+    id: "conta-valor"
+- inputText: "450.00"
+- hideKeyboard
+- tapOn:
+    id: "conta-vencimento"
+- inputText: "2099-01-10"
+- hideKeyboard
+- tapOn:
+    id: "conta-salvar"
+
+# A conta recem-criada aparece na lista
+- extendedWaitUntil:
+    visible: "IPTU E2E"
+    timeout: 20000
+
+- tapOn:
+    id: "tab-dashboard"
+- extendedWaitUntil:
+    visible: "Resumo do mes atual."
+    timeout: 20000

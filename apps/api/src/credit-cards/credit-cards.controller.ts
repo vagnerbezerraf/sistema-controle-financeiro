@@ -22,6 +22,7 @@ import {
 } from '../common/auth/auth.guard';
 import { toDate } from '../common/utils/date';
 import { updateWithOptimisticLock } from '../common/utils/optimistic-lock';
+import { OutboxService } from '../outbox/outbox.service';
 import {
   CreateCreditCardRequest,
   PayInvoiceRequest,
@@ -38,7 +39,10 @@ type CreditCardWithAccount = CreditCard & { account: Account };
 @UseGuards(JwtAuthGuard, SpaceRoleGuard)
 @ApiBearerAuth('access-token')
 export class CreditCardsController {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly outbox: OutboxService,
+  ) {}
 
   @Get()
   @Roles(['owner', 'admin', 'contributor', 'viewer'])
@@ -284,6 +288,17 @@ export class CreditCardsController {
             fromAccountId: from.id,
             transactionId: trx.id,
           },
+        },
+      });
+
+      await this.outbox.record(tx, {
+        financialSpaceId: spaceId,
+        eventType: 'invoice.paid',
+        payload: {
+          cardId: card.id,
+          closingDate,
+          amount: value,
+          transactionId: trx.id,
         },
       });
 

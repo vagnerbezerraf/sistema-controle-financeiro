@@ -14,6 +14,13 @@ import {
   Wallet,
   Tags,
   CalendarRange,
+  CalendarClock,
+  BellRing,
+  TrendingUp,
+  FlaskConical,
+  Upload,
+  GitMerge,
+  Users,
   ChevronsUpDown,
 } from 'lucide-react';
 import { cls } from '@/lib/format';
@@ -31,9 +38,16 @@ const navItems: NavItem[] = [
   { href: '/app/accounts', label: 'Contas', icon: Wallet },
   { href: '/app/categories', label: 'Categorias', icon: Tags },
   { href: '/app/calendar', label: 'Calendario', icon: CalendarRange },
+  { href: '/app/obligations', label: 'Contas a pagar', icon: CalendarClock },
+  { href: '/app/alerts', label: 'Alertas', icon: BellRing },
   { href: '/app/cards', label: 'Cartoes e faturas', icon: CreditCard },
   { href: '/app/budgets', label: 'Orcamentos', icon: PiggyBank },
   { href: '/app/goals', label: 'Metas', icon: Target },
+  { href: '/app/projection', label: 'Saldo projetado', icon: TrendingUp },
+  { href: '/app/scenarios', label: 'Cenarios', icon: FlaskConical },
+  { href: '/app/imports', label: 'Importar extrato', icon: Upload },
+  { href: '/app/reconciliation', label: 'Conciliacao', icon: GitMerge },
+  { href: '/app/members', label: 'Membros', icon: Users },
   { href: '/app/reports', label: 'Relatorios', icon: FileBarChart },
 ];
 

@@ -17,11 +17,7 @@ import {
   SpaceRoleGuard,
   AuthenticatedUser,
 } from '../common/auth/auth.guard';
-import {
-  CreateFinancialSpaceRequest,
-  InviteMemberRequest,
-  UpdateFinancialSpaceRequest,
-} from './http/dto';
+import { CreateFinancialSpaceRequest, UpdateFinancialSpaceRequest } from './http/dto';
 import { updateWithOptimisticLock } from '../common/utils/optimistic-lock';
 
 @ApiTags('financial-spaces')
@@ -95,59 +91,6 @@ export class FinancialSpacesController {
       reload: () => this.prisma.financialSpace.findUniqueOrThrow({ where: { id: spaceId } }),
       notFoundMessage: 'Espaco financeiro nao encontrado',
       staleMessage: 'Espaco financeiro foi alterado por outra sessao; recarregue e tente novamente',
-    });
-  }
-
-  @Get(':spaceId/members')
-  @UseGuards(SpaceRoleGuard)
-  @Roles([FinancialSpaceRole.owner, FinancialSpaceRole.admin, FinancialSpaceRole.contributor, FinancialSpaceRole.viewer])
-  @ApiOperation({ summary: 'Listar membros do espaco financeiro' })
-  async members(@Param('spaceId') spaceId: string) {
-    return this.prisma.membership.findMany({
-      where: { financialSpaceId: spaceId },
-      include: { user: { select: { email: true, name: true } } },
-    }).then((list) =>
-      list.map((m) => ({
-        id: m.id,
-        role: m.role,
-        status: m.status,
-        email: m.invitedEmail ?? m.user.email,
-        name: m.user.name ?? null,
-        invitedAt: m.invitedAt,
-      })),
-    );
-  }
-
-  @Post(':spaceId/members')
-  @UseGuards(SpaceRoleGuard)
-  @Roles([FinancialSpaceRole.owner, FinancialSpaceRole.admin])
-  @ApiOperation({ summary: 'Convidar membro (MVP: auto-aceita se usuario existir)' })
-  async invite(@Param('spaceId') spaceId: string, @Body() body: InviteMemberRequest) {
-    const targetUser = await this.prisma.user.findUnique({ where: { email: body.email.trim().toLowerCase() } });
-    if (targetUser) {
-      return this.prisma.membership.upsert({
-        where: { financialSpaceId_userId: { financialSpaceId: spaceId, userId: targetUser.id } },
-        update: { role: body.role, status: 'active', revokedAt: null },
-        create: {
-          financialSpaceId: spaceId,
-          userId: targetUser.id,
-          role: body.role,
-          status: 'active',
-          invitedEmail: body.email,
-          invitedAt: new Date(),
-          inviteAcceptedAt: new Date(),
-        },
-      });
-    }
-    return this.prisma.membership.create({
-      data: {
-        financialSpaceId: spaceId,
-        userId: (await this.prisma.user.findFirstOrThrow({ select: { id: true } })).id,
-        role: body.role,
-        status: 'invited',
-        invitedEmail: body.email,
-        invitedAt: new Date(),
-      },
     });
   }
 }

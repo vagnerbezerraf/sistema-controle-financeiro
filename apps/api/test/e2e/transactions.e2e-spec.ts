@@ -14,6 +14,30 @@ import {
 
 const MES = '2026-03';
 
+/** Convida um usuario para o espaco do dono e aceita em nome dele. */
+async function joinSpace(
+  app: INestApplication,
+  ownerToken: string,
+  spaceId: string,
+  user: { email: string; accessToken: string },
+  role: string,
+): Promise<void> {
+  const invited = await api(app)
+    .post(`/api/v1/financial-spaces/${spaceId}/invites`)
+    .set(auth(ownerToken))
+    .send({ email: user.email, role });
+  if (invited.status !== 201) {
+    throw new Error(`Falha ao convidar (HTTP ${invited.status}): ${JSON.stringify(invited.body)}`);
+  }
+  const accepted = await api(app)
+    .post('/api/v1/space-invites/accept')
+    .set(auth(user.accessToken))
+    .send({ token: invited.body.token });
+  if (accepted.status !== 201) {
+    throw new Error(`Falha ao aceitar convite (HTTP ${accepted.status}): ${JSON.stringify(accepted.body)}`);
+  }
+}
+
 describe('E2E | Transações: criação, consistência de movimentos, idempotência e dashboard', () => {
   let app: INestApplication;
   let prisma: PrismaClient;
@@ -356,15 +380,11 @@ describe('E2E | Transações: criação, consistência de movimentos, idempotên
     const viewer = await registerUser(app);
     const conta = await createAccount(app, dono.accessToken, dono.spaceId);
 
-    for (const [email, role] of [
-      [contributor.email, 'contributor'],
-      [viewer.email, 'viewer'],
+    for (const [user, role] of [
+      [contributor, 'contributor'],
+      [viewer, 'viewer'],
     ] as const) {
-      await api(app)
-        .post(`/api/v1/financial-spaces/${dono.spaceId}/members`)
-        .set(auth(dono.accessToken))
-        .send({ email, role })
-        .expect(201);
+      await joinSpace(app, dono.accessToken, dono.spaceId, user, role);
     }
 
     const criadaPeloContributor = await createTransaction(
@@ -591,11 +611,7 @@ describe('E2E | Transações: criação, consistência de movimentos, idempotên
     const viewer = await registerUser(app);
     const conta = await createAccount(app, dono.accessToken, dono.spaceId);
 
-    await api(app)
-      .post(`/api/v1/financial-spaces/${dono.spaceId}/members`)
-      .set(auth(dono.accessToken))
-      .send({ email: viewer.email, role: 'viewer' })
-      .expect(201);
+    await joinSpace(app, dono.accessToken, dono.spaceId, viewer, 'viewer');
 
     const original = await createTransaction(app, dono.accessToken, dono.spaceId, {
       type: 'expense',

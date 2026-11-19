@@ -4,8 +4,12 @@ import { Queue, Worker, QueueEvents } from 'bullmq';
 import IORedis from 'ioredis';
 import { PrismaClient } from '@prisma/client';
 import { pino } from 'pino';
+import { createOutboxDrainer, createPrismaOutboxStore, type OutboxEventRecord } from './outbox';
 
 const logger = pino({ name: 'scf-worker' });
+
+/** Intervalo do ciclo que drena o outbox transacional. */
+const OUTBOX_POLL_INTERVAL_MS = 30_000;
 
 const env = cleanEnv(process.env, {
   REDIS_HOST: host({ default: '127.0.0.1' }),
@@ -78,6 +82,20 @@ async function bootstrap() {
   const workers: Worker[] = [];
   const qevs: QueueEvents[] = [];
 
+  // Drena o outbox transacional gravado pela API na mesma transacao das
+  // escritas de negocio. Ponto de extensao: aqui entrariam e-mails, webhooks,
+  // notificacoes etc., todos disparados de forma confiavel (com retry).
+  const outboxDrainer = createOutboxDrainer({
+    store: createPrismaOutboxStore(prisma),
+    dispatch: (event: OutboxEventRecord) => {
+      logger.info(
+        { id: event.id, eventType: event.eventType, financialSpaceId: event.financialSpaceId },
+        'Publicando evento do outbox',
+      );
+    },
+    logger,
+  });
+
   const makeWorker = (name: QueueKey, handler: (jobName: string, data: any) => Promise<void>) => {
     const w = new Worker(
       QUEUES[name],
@@ -98,8 +116,11 @@ async function bootstrap() {
     return w;
   };
 
-  makeWorker('outbox', async (_name, _data) => {
-    logger.info('Processando outbox pattern (placeholder)');
+  makeWorker('outbox', async () => {
+    const result = await outboxDrainer.drainOnce();
+    if (result.processed > 0) {
+      logger.info(result, 'Lote do outbox processado');
+    }
   });
 
   makeWorker('obligations', async (_name, _data) => {
@@ -113,6 +134,13 @@ async function bootstrap() {
   makeWorker('reports', async (_name, _data) => {
     logger.info('Cacheando relatorios (placeholder)');
   });
+
+  // Agenda o ciclo do outbox como job repetivel (um por intervalo). O `add`
+  // repetivel e idempotente por chave, entao reiniciar o worker nao acumula
+  // agendamentos duplicados.
+  await getQueue('outbox')
+    .add('outbox:process', {}, { repeat: { every: OUTBOX_POLL_INTERVAL_MS }, removeOnComplete: true, removeOnFail: 100 })
+    .catch((e: unknown) => logger.warn({ err: (e as Error)?.message }, 'Nao foi possivel agendar o ciclo do outbox'));
 
   const shutdown = async (sig: string) => {
     logger.info({ sig }, 'Encerrando worker...');

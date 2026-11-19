@@ -1,6 +1,6 @@
 import { IsEnum, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { CurrencyCode, FinancialSpaceState, FinancialSpaceRole } from '@prisma/client';
+import { CurrencyCode, FinancialSpaceState } from '@prisma/client';
 
 export class CreateFinancialSpaceRequest {
   @ApiProperty({ example: 'Financeiro familia' })
@@ -50,14 +50,4 @@ export class UpdateFinancialSpaceRequest {
   @IsInt()
   @Min(0)
   version?: number;
-}
-
-export class InviteMemberRequest {
-  @ApiProperty({ example: 'convidado@exemplo.com' })
-  @IsString()
-  email!: string;
-
-  @ApiProperty({ enum: FinancialSpaceRole })
-  @IsEnum(FinancialSpaceRole)
-  role!: FinancialSpaceRole;
 }

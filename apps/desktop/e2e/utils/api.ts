@@ -48,6 +48,19 @@ export interface SeedOptions {
   creditCard?: { name: string; limit?: string; closingDay?: number; dueDay?: number };
   /** Compra lancada na conta tecnica do cartao (exige `creditCard`). */
   purchase?: string;
+  /** Contas a pagar/receber avulsas criadas no espaco financeiro. */
+  obligations?: Array<{ type: 'income' | 'expense'; description: string; amount: string; dueDate: string }>;
+  /** Recorrencias criadas no espaco financeiro (materializam previsoes). */
+  recurrences?: Array<{
+    type: 'income' | 'expense';
+    description: string;
+    amount: string;
+    frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+    interval?: number;
+    startDate: string;
+    generateUpTo?: string;
+    occurrencesLimit?: number;
+  }>;
 }
 
 async function request<T>(method: string, endpoint: string, options: { token?: string; json?: unknown } = {}): Promise<T> {
@@ -155,6 +168,25 @@ export async function seedUser(options: SeedOptions = {}): Promise<SeededUser> {
         postings: [{ accountId: card.accountId, amount: options.purchase, direction: 'credit' }],
       });
     }
+  }
+
+  for (const obligation of options.obligations ?? []) {
+    await request('POST', `/financial-spaces/${spaceId}/obligations`, { token, json: obligation });
+  }
+
+  for (const rule of options.recurrences ?? []) {
+    const { type, description, amount, frequency, interval, startDate, generateUpTo, occurrencesLimit } = rule;
+    await request('POST', `/financial-spaces/${spaceId}/recurrences`, {
+      token,
+      json: {
+        frequency,
+        interval: interval ?? 1,
+        startDate,
+        template: { type, description, amount },
+        ...(generateUpTo ? { generateUpTo } : {}),
+        ...(occurrencesLimit ? { occurrencesLimit } : {}),
+      },
+    });
   }
 
   return { email, password: TEST_PASSWORD, accessToken: token, spaceId, accountId, cardId, cardName, cardAccountId };
