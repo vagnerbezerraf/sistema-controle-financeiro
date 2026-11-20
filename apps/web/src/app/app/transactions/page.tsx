@@ -1,12 +1,23 @@
 'use client';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
+import type { FormEvent } from 'react';
 import { useAuth } from '@/components/auth/AuthContext';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, API_BASE_URL, getAuthToken } from '@/lib/api-client';
 import { formatCurrency, cls } from '@/lib/format';
-import type { Transaction, Category } from '@scf/api-contracts';
-import { ArrowDownRight, ArrowLeftRight, ArrowUpRight, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import type { Transaction, Category, Attachment } from '@scf/api-contracts';
+import {
+  ArrowDownRight,
+  ArrowLeftRight,
+  ArrowUpRight,
+  Download,
+  Paperclip,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Trash2,
+} from 'lucide-react';
 
 export default function TransactionsPage() {
   const { currentSpaceId } = useAuth();
@@ -16,6 +27,7 @@ export default function TransactionsPage() {
   const [to, setTo] = useState('');
   const [q, setQ] = useState('');
   const [tag, setTag] = useState('');
+  const [attachmentsFor, setAttachmentsFor] = useState<string | null>(null);
 
   const params = useMemo(() => {
     const sp = new URLSearchParams();
@@ -135,6 +147,7 @@ export default function TransactionsPage() {
                 <th className="px-6 py-3 font-medium">Etiquetas</th>
                 <th className="px-6 py-3 font-medium">Status</th>
                 <th className="px-6 py-3 text-right font-medium">Valor</th>
+                <th className="px-6 py-3 text-right font-medium">Anexos</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
@@ -147,12 +160,13 @@ export default function TransactionsPage() {
                       <td className="px-6 py-4"><div className="h-4 w-16 animate-pulse rounded bg-neutral-100" /></td>
                       <td className="px-6 py-4"><div className="h-5 w-20 animate-pulse rounded bg-neutral-100" /></td>
                       <td className="px-6 py-4"><div className="ml-auto h-5 w-24 animate-pulse rounded bg-neutral-100" /></td>
+                      <td className="px-6 py-4"><div className="ml-auto h-5 w-24 animate-pulse rounded bg-neutral-100" /></td>
                     </tr>
                   ))
                 : items.length === 0
                 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-10 text-center text-neutral-500">
+                      <td colSpan={7} className="px-6 py-10 text-center text-neutral-500">
                         Nenhum lancamento encontrado com os filtros aplicados.
                       </td>
                     </tr>
@@ -160,7 +174,8 @@ export default function TransactionsPage() {
                 : items.map((t) => {
                     const cat = (t as any).category;
                     return (
-                      <tr key={t.id} className="hover:bg-neutral-50">
+                      <Fragment key={t.id}>
+                      <tr className="hover:bg-neutral-50">
                         <td className="px-6 py-3">
                           <div className="flex items-center gap-3">
                             <span className={
@@ -221,7 +236,25 @@ export default function TransactionsPage() {
                             {t.type === 'income' ? '+' : t.type === 'expense' ? '-' : ''} {formatCurrency(t.totalAmount)}
                           </span>
                         </td>
+                        <td className="px-6 py-3 text-right">
+                          <button
+                            type="button"
+                            className="btn-outline"
+                            data-testid={`comprovantes-${t.id}`}
+                            onClick={() => setAttachmentsFor((cur) => (cur === t.id ? null : t.id))}
+                          >
+                            <Paperclip className="h-4 w-4" /> Comprovantes
+                          </button>
+                        </td>
                       </tr>
+                      {attachmentsFor === t.id && (
+                        <tr className="bg-neutral-50">
+                          <td colSpan={7} className="px-6 py-4">
+                            <AttachmentsPanel spaceId={currentSpaceId} transactionId={t.id} />
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
             </tbody>
@@ -230,6 +263,173 @@ export default function TransactionsPage() {
       </section>
     </div>
   );
+}
+
+function AttachmentsPanel({
+  spaceId,
+  transactionId,
+}: {
+  spaceId: string | null;
+  transactionId: string;
+}) {
+  const qc = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+
+  const queryKey = ['attachments', spaceId, transactionId] as const;
+  const listQ = useQuery({
+    queryKey,
+    enabled: !!spaceId,
+    queryFn: () =>
+      apiFetch<{ items: Attachment[] }>(
+        `/financial-spaces/${spaceId}/transactions/${transactionId}/attachments`,
+      ),
+  });
+  const items = listQ.data?.items ?? [];
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!spaceId) return;
+    const file = fileRef.current?.files?.[0];
+    if (!file) {
+      setError('Selecione um arquivo para anexar.');
+      return;
+    }
+    setError(null);
+    setFlash(null);
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      await apiFetch(`/financial-spaces/${spaceId}/transactions/${transactionId}/attachments`, {
+        method: 'POST',
+        body: form,
+      });
+      if (fileRef.current) fileRef.current.value = '';
+      setFlash('Comprovante anexado.');
+      await qc.invalidateQueries({ queryKey });
+    } catch (err: any) {
+      setError(err?.details?.message ?? err?.message ?? 'Nao foi possivel anexar o comprovante');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    if (!spaceId) return;
+    setError(null);
+    try {
+      await apiFetch(
+        `/financial-spaces/${spaceId}/transactions/${transactionId}/attachments/${id}`,
+        { method: 'DELETE' },
+      );
+      await qc.invalidateQueries({ queryKey });
+    } catch (err: any) {
+      setError(err?.details?.message ?? err?.message ?? 'Nao foi possivel remover o comprovante');
+    }
+  }
+
+  async function download(a: Attachment) {
+    if (!spaceId) return;
+    setError(null);
+    const token = getAuthToken();
+    const res = await fetch(
+      `${API_BASE_URL}/financial-spaces/${spaceId}/transactions/${transactionId}/attachments/${a.id}/download`,
+      { headers: token ? { authorization: `Bearer ${token}` } : {} },
+    );
+    if (!res.ok) {
+      setError('Nao foi possivel baixar o comprovante');
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = a.fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="space-y-3" data-testid="comprovantes-painel">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-neutral-900">Comprovantes</p>
+          <p className="text-xs text-neutral-500">PNG, JPEG, WEBP ou PDF, ate 5 MB.</p>
+        </div>
+        <form className="flex items-end gap-2" onSubmit={submit}>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,application/pdf"
+            data-testid="comprovante-arquivo"
+            className="input h-9 py-1 text-xs"
+          />
+          <button type="submit" className="btn-primary" data-testid="comprovante-enviar" disabled={busy}>
+            {busy ? 'Enviando...' : 'Anexar'}
+          </button>
+        </form>
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700">
+          {error}
+        </div>
+      )}
+      {flash && (
+        <div className="rounded-md border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-700">
+          {flash}
+        </div>
+      )}
+
+      {items.length === 0 ? (
+        <p className="text-sm text-neutral-500">Nenhum comprovante anexado.</p>
+      ) : (
+        <ul className="divide-y divide-neutral-200 rounded-md border border-neutral-200 bg-white">
+          {items.map((a) => (
+            <li
+              key={a.id}
+              data-testid={`comprovante-${a.id}`}
+              className="flex flex-wrap items-center justify-between gap-3 px-3 py-2"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-neutral-900">{a.fileName}</div>
+                <div className="text-xs text-neutral-500">
+                  {formatBytes(a.size)} · {a.contentType}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="btn-outline"
+                  data-testid={`comprovante-baixar-${a.id}`}
+                  onClick={() => download(a)}
+                >
+                  <Download className="h-4 w-4" /> Baixar
+                </button>
+                <button
+                  type="button"
+                  className="btn-outline"
+                  data-testid={`comprovante-remover-${a.id}`}
+                  onClick={() => remove(a.id)}
+                >
+                  <Trash2 className="h-4 w-4" /> Remover
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function statusBadge(s: string) {

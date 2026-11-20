@@ -151,6 +151,7 @@ model FinancialSpace {
   obligations     Obligation[]
   importBatches   ImportBatch[]
   invites         SpaceInvite[]
+  attachments     Attachment[]
 
   @@unique([id])
   @@map("financial_spaces")
@@ -286,6 +287,7 @@ model Transaction {
   reconciledObligation Obligation? @relation("ObligationReconciliation")
   reversalOfTransaction Transaction? @relation("TransactionReversal", fields: [reversalOfTransactionId], references: [id], onDelete: SetNull)
   reversedByTransaction Transaction? @relation("TransactionReversal")
+  attachments          Attachment[]
 
   @@unique([financialSpaceId, idempotencyKey])
   @@index([financialSpaceId, effectiveDate, status, type])
@@ -541,4 +543,27 @@ model NotificationPreference {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notification_preferences")
+}
+
+// Comprovantes (recibos/documentos) anexados a uma transacao. O arquivo fica no
+// storage (identificado por `storageKey`); aqui guardamos so os metadados e o
+// `checksum` (SHA-256) do conteudo, para auditoria e deduplicacao.
+model Attachment {
+  id               String   @id @default(uuid())
+  financialSpaceId String
+  transactionId    String
+  fileName         String
+  contentType      String
+  size             Int
+  storageKey       String
+  checksum         String
+  uploadedBy       String?
+  createdAt        DateTime @default(now())
+
+  financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+  transaction    Transaction    @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([financialSpaceId, transactionId])
+  @@index([financialSpaceId, checksum])
+  @@map("attachments")
 }

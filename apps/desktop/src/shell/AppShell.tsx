@@ -71,6 +71,9 @@ function currentTitle(pathname: string) {
     case '/accounts': return 'Contas';
     case '/cards': return 'Cartoes e faturas';
     case '/obligations': return 'Contas a pagar e receber';
+    case '/categories': return 'Categorias';
+    case '/budgets': return 'Orcamentos';
+    case '/goals': return 'Metas';
     default: return 'SCF Desktop';
   }
 }

@@ -217,6 +217,23 @@ export interface CreateTransactionRequest {
   }>;
 }
 
+/** Comprovante (recibo/documento) anexado a uma transacao. */
+export interface Attachment {
+  id: string;
+  transactionId: string;
+  fileName: string;
+  contentType: string;
+  /** Tamanho em bytes. */
+  size: number;
+  /** SHA-256 do conteudo, para auditoria e deduplicacao. */
+  checksum: string;
+  createdAt: string;
+}
+
+export interface AttachmentListResponse {
+  items: Attachment[];
+}
+
 export type InvoiceStatus = 'open' | 'closed' | 'overdue' | 'paid';
 
 export interface CreditCard {

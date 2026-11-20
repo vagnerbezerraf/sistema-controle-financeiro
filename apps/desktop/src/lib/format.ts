@@ -18,3 +18,8 @@ export function formatDate(iso: string, locale = 'pt-BR') {
 export function cls(...args: Array<string | false | null | undefined>) {
   return args.filter(Boolean).join(' ');
 }
+
+export function formatPercent(n: number, digits = 1) {
+  if (!Number.isFinite(n)) return '-';
+  return `${n.toFixed(digits).replace('.', ',')}%`;
+}

@@ -1,0 +1,66 @@
+appId: host.exp.exponent
+---
+- openLink: "exp://10.0.2.2:8081"
+- runFlow: scripts/ensure-logged-in.yaml
+
+# Abre a aba de categorias
+- tapOn:
+    id: "tab-categorias"
+- extendedWaitUntil:
+    visible: "Classifique seus lancamentos em receitas, despesas e ambos."
+    timeout: 20000
+- assertVisible: "Categorias"
+
+# Abre a aba de orcamentos e cria um orcamento geral
+- tapOn:
+    id: "tab-orcamentos"
+- extendedWaitUntil:
+    visible: "Limites por categoria e o consumo realizado no periodo."
+    timeout: 20000
+- assertVisible: "Orcamentos"
+
+- tapOn:
+    id: "orcamento-novo"
+- tapOn:
+    id: "orcamento-limite"
+- inputText: "1000.00"
+- hideKeyboard
+- tapOn:
+    id: "orcamento-salvar"
+
+# O orcamento criado aparece com o limite formatado
+- extendedWaitUntil:
+    visible: ".*1.000,00.*"
+    timeout: 20000
+
+# Abre a aba de metas e cria uma meta
+- tapOn:
+    id: "tab-metas"
+- extendedWaitUntil:
+    visible: "Valores-alvo, acumulado das contribuicoes e prazo de cada meta."
+    timeout: 20000
+- assertVisible: "Metas"
+
+- tapOn:
+    id: "meta-nova"
+- tapOn:
+    id: "meta-nome"
+- inputText: "Reserva E2E"
+- hideKeyboard
+- tapOn:
+    id: "meta-alvo"
+- inputText: "5000.00"
+- hideKeyboard
+- tapOn:
+    id: "meta-salvar"
+
+# A meta recem-criada aparece na lista
+- extendedWaitUntil:
+    visible: "Reserva E2E"
+    timeout: 20000
+
+- tapOn:
+    id: "tab-dashboard"
+- extendedWaitUntil:
+    visible: "Resumo do mes atual."
+    timeout: 20000
