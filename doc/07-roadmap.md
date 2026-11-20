@@ -118,7 +118,7 @@ Adicionar automação externa somente depois de o núcleo estar estável.
 
 - Integração com agregador/Open Finance mediante consentimento.
 - Sincronização incremental.
-- Regras avançadas de categorização.
+- ✅ **Regras avançadas de categorização** — entregue (1ª fatia da Fase 5): CRUD com precedência, casamento pela descrição, aplicação retroativa e categorização no commit da importação; ver checklist §2.34.
 - Relatórios assíncronos.
 - Múltiplas moedas.
 - Modo offline completo.

@@ -1,5 +1,5 @@
 import { useAuth } from '../auth/AuthContext';
-import { ArrowLeftRight, CalendarClock, CreditCard, LogOut, PiggyBank, Settings, Tags, Target, Wallet, LayoutDashboard } from 'lucide-react';
+import { ArrowLeftRight, CalendarClock, CreditCard, Filter, LogOut, PiggyBank, Settings, Tags, Target, Wallet, LayoutDashboard } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -21,6 +21,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <NavItem to="/transactions" label="Lancamentos" icon={ArrowLeftRight} pathname={location.pathname} />
           <NavItem to="/accounts" label="Contas" icon={Wallet} pathname={location.pathname} />
           <NavItem to="/categories" label="Categorias" icon={Tags} pathname={location.pathname} />
+          <NavItem to="/categorization-rules" label="Regras de categorizacao" icon={Filter} pathname={location.pathname} />
           <NavItem to="/cards" label="Cartoes" icon={CreditCard} pathname={location.pathname} />
           <NavItem to="/obligations" label="Contas a pagar" icon={CalendarClock} pathname={location.pathname} />
           <NavItem to="/budgets" label="Orcamentos" icon={PiggyBank} pathname={location.pathname} />
@@ -72,6 +73,7 @@ function currentTitle(pathname: string) {
     case '/cards': return 'Cartoes e faturas';
     case '/obligations': return 'Contas a pagar e receber';
     case '/categories': return 'Categorias';
+    case '/categorization-rules': return 'Regras de categorizacao';
     case '/budgets': return 'Orcamentos';
     case '/goals': return 'Metas';
     default: return 'SCF Desktop';

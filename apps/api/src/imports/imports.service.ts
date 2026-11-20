@@ -8,6 +8,8 @@ import type {
   ImportPreview,
 } from '@scf/api-contracts';
 import { toDate } from '../common/utils/date';
+import { CategorizationService } from '../categorization/categorization.service';
+import { resolveCategoryId, type CategorizationTargetType } from '../categorization/domain/categorization-rule';
 import {
   buildImportPreview,
   type ExistingEntry,
@@ -32,7 +34,10 @@ function parseSource(format: ImportFormat, text: string): ParsedImportRow[] {
  */
 @Injectable()
 export class ImportsService {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly categorization: CategorizationService,
+  ) {}
 
   /** Cria a previa (nao aplicada) a partir do texto do extrato. */
   async preview(
@@ -110,15 +115,24 @@ export class ImportsService {
     const { summary, rows } = buildImportPreview(parsed, existing);
     const valid = rows.filter((row) => row.status === 'valid');
 
+    // As regras ativas sao lidas uma vez e aplicadas a cada linha: o lancamento
+    // importado ja nasce categorizado, sem exigir a aplicacao retroativa depois.
+    const rules = await this.categorization.loadRuleInputs(spaceId);
+
     const updated = await this.prisma.$transaction(async (tx) => {
       const createdIds: string[] = [];
       for (const row of valid) {
+        const categoryId = resolveCategoryId(rules, {
+          description: row.description,
+          type: row.type as CategorizationTargetType,
+        });
         const created = await tx.transaction.create({
           data: {
             financialSpaceId: spaceId,
             type: row.type as ImportRowType,
             status: 'confirmed',
             description: row.description,
+            categoryId,
             currency: 'BRL',
             totalAmount: row.amount as string,
             effectiveDate: toDate(row.date as string),

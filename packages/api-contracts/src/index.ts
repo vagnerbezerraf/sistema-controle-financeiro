@@ -1005,6 +1005,67 @@ export interface AutoReconcileRequest {
   batchId?: string;
 }
 
+/** Como o padrao da regra de categorizacao e comparado com a descricao. */
+export type RuleMatchType = 'contains' | 'equals' | 'startsWith';
+
+/** Situacao de uma regra de categorizacao (`archived` deixa de ser aplicada). */
+export type CategorizationRuleState = 'active' | 'archived';
+
+/**
+ * Regra que categoriza automaticamente um lancamento pela descricao. A primeira
+ * regra (menor `priority`) que casar define a categoria; `type` nulo casa os
+ * dois tipos (receita e despesa).
+ */
+export interface CategorizationRule {
+  id: string;
+  financialSpaceId: string;
+  name: string;
+  matchType: RuleMatchType;
+  pattern: string;
+  categoryId: string;
+  categoryName: string | null;
+  /** Filtro opcional pelo tipo do lancamento; nulo aplica a receita e despesa. */
+  type: TransactionType | null;
+  /** Menor valor = maior precedencia. */
+  priority: number;
+  state: CategorizationRuleState;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface CreateCategorizationRuleRequest {
+  name: string;
+  matchType: RuleMatchType;
+  pattern: string;
+  categoryId: string;
+  /** Restringe a regra a receita ou despesa; ausente aplica a ambos. */
+  type?: TransactionType;
+  /** Padrao 100. Menor valor = aplicada antes. */
+  priority?: number;
+}
+
+export interface UpdateCategorizationRuleRequest {
+  name?: string;
+  matchType?: RuleMatchType;
+  pattern?: string;
+  categoryId?: string;
+  /** Enviar `null` remove o filtro de tipo (aplica a receita e despesa). */
+  type?: TransactionType | null;
+  priority?: number;
+  state?: CategorizationRuleState;
+  /** Concorrencia otimista. */
+  version?: number;
+}
+
+/** Resultado da aplicacao retroativa das regras aos lancamentos sem categoria. */
+export interface ApplyCategorizationResult {
+  /** Lancamentos sem categoria examinados no periodo. */
+  scanned: number;
+  /** Lancamentos que receberam categoria por alguma regra. */
+  applied: number;
+}
+
 /** Canal pelo qual uma notificacao pode ser entregue. */
 export type NotificationChannel = 'email' | 'push' | 'desktop';
 

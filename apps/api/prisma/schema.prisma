@@ -105,6 +105,12 @@ enum ImportBatchFormat {
   ofx
 }
 
+enum RuleMatchType {
+  contains
+  equals
+  startsWith
+}
+
 model User {
   id              String       @id @default(uuid())
   email           String       @unique
@@ -152,6 +158,7 @@ model FinancialSpace {
   importBatches   ImportBatch[]
   invites         SpaceInvite[]
   attachments     Attachment[]
+  categorizationRules CategorizationRule[]
 
   @@unique([id])
   @@map("financial_spaces")
@@ -244,6 +251,7 @@ model Category {
   children       Category[]     @relation("CategoryHierarchy")
   transactions   Transaction[]
   budgets        Budget[]
+  categorizationRules CategorizationRule[]
 
   @@unique([financialSpaceId, name, parentId])
   @@index([financialSpaceId, type, state])
@@ -566,4 +574,30 @@ model Attachment {
   @@index([financialSpaceId, transactionId])
   @@index([financialSpaceId, checksum])
   @@map("attachments")
+}
+
+// Regras de categorizacao automatica (Fase 5): casam a descricao do lancamento
+// por um padrao textual e atribuem uma categoria. A precedencia e por `priority`
+// (menor primeiro). As regras sao aplicadas no commit da importacao e por uma
+// acao retroativa explicita aos lancamentos ainda sem categoria.
+model CategorizationRule {
+  id               String          @id @default(uuid())
+  financialSpaceId String
+  name             String
+  matchType        RuleMatchType
+  pattern          String
+  categoryId       String
+  type             TransactionType?
+  priority         Int             @default(100)
+  state            EntityState     @default(active)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  version          Int             @default(0)
+
+  financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+  category       Category       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([financialSpaceId, state, priority])
+  @@index([financialSpaceId, categoryId])
+  @@map("categorization_rules")
 }

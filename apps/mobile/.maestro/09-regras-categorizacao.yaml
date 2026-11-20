@@ -1,0 +1,45 @@
+appId: host.exp.exponent
+---
+- openLink: "exp://10.0.2.2:8081"
+- runFlow: scripts/ensure-logged-in.yaml
+
+# Abre a aba de regras de categorizacao
+- tapOn:
+    id: "tab-regras"
+- extendedWaitUntil:
+    visible: "Categorize lancamentos automaticamente pela descricao. A primeira regra que casar vence."
+    timeout: 20000
+- assertVisible: "Regras de categorizacao"
+
+# Cria uma regra que categoriza despesas cujo texto contenha "mercado"
+- tapOn:
+    id: "regras-nova"
+- tapOn:
+    id: "regra-nome"
+- inputText: "Mercado E2E"
+- tapOn:
+    id: "regra-padrao"
+- inputText: "mercado"
+- hideKeyboard
+- tapOn:
+    id: "regra-categoria-Alimentacao"
+- tapOn:
+    id: "regra-salvar"
+
+# A regra recem-criada aparece na lista
+- extendedWaitUntil:
+    visible: "Mercado E2E"
+    timeout: 20000
+
+# Aplicacao retroativa devolve o resumo
+- tapOn:
+    id: "regras-aplicar"
+- extendedWaitUntil:
+    visible: ".*receberam categoria.*"
+    timeout: 20000
+
+- tapOn:
+    id: "tab-dashboard"
+- extendedWaitUntil:
+    visible: "Resumo do mes atual."
+    timeout: 20000
