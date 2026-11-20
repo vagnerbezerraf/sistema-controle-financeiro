@@ -3,6 +3,8 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import type { AccountType, AdvancedReportView } from '@scf/api-contracts';
 import { toDate } from '../common/utils/date';
 import { monthRange } from '../monthly-comparison/domain/monthly-comparison';
+import { CurrencyService } from '../currency/currency.service';
+import { convertCents } from '../currency/domain/exchange-rate';
 import {
   buildAdvancedReport,
   buildEvolution,
@@ -21,10 +23,18 @@ const amount = (value: number): string => (value / 100).toFixed(2);
  * eixo, o patrimonio liquido (postings confirmados por conta ativa), a taxa de
  * poupanca do mes e a evolucao mensal. Fica em um servico proprio para poder
  * ser reusado sem duplicar as consultas.
+ *
+ * Tudo e apresentado na moeda de reporte do espaco: os saldos por conta e os
+ * totais mensais sao convertidos pela taxa vigente (patrimonio usa a data de
+ * hoje; a evolucao usa a data do lancamento). Valores sem taxa de cambio ficam
+ * fora das somas para nao misturar moedas.
  */
 @Injectable()
 export class AdvancedReportService {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly currency: CurrencyService,
+  ) {}
 
   async build(
     spaceId: string,
@@ -37,9 +47,10 @@ export class AdvancedReportService {
     const rangeStart = monthRange(series[0]).from;
     const rangeEnd = monthRange(month).to;
 
+    const { baseCurrency, rates } = await this.currency.loadContext(spaceId);
     const accounts = await this.prisma.account.findMany({
       where: { financialSpaceId: spaceId, state: 'active' },
-      select: { id: true, name: true, type: true },
+      select: { id: true, name: true, type: true, currency: true },
       orderBy: [{ createdAt: 'asc' }],
     });
     const accountIds = accounts.map((account) => account.id);
@@ -59,7 +70,7 @@ export class AdvancedReportService {
           type: { in: ['income', 'expense'] },
           effectiveDate: { gte: toDate(rangeStart), lte: toDate(rangeEnd) },
         },
-        select: { type: true, totalAmount: true, effectiveDate: true },
+        select: { type: true, totalAmount: true, effectiveDate: true, currency: true },
       }),
     ]);
 
@@ -72,26 +83,44 @@ export class AdvancedReportService {
       balanceByAccount.set(posting.accountId, (balanceByAccount.get(posting.accountId) ?? 0) + delta);
     }
 
+    // Posicao atual: converte o saldo de cada conta pela taxa de hoje.
+    const today = new Date().toISOString();
     const netWorth = computeNetWorth(
-      accounts.map((account) => ({
-        id: account.id,
-        name: account.name,
-        type: account.type as AccountType,
-        balance: amount(balanceByAccount.get(account.id) ?? 0),
-      })),
+      baseCurrency,
+      accounts.map((account) => {
+        const balanceCents = balanceByAccount.get(account.id) ?? 0;
+        const converted = convertCents(balanceCents, account.currency, baseCurrency, rates, today);
+        return {
+          id: account.id,
+          name: account.name,
+          type: account.type as AccountType,
+          currency: account.currency,
+          balance: amount(balanceCents),
+          balanceInBase: converted === null ? null : amount(converted),
+        };
+      }),
     );
 
     // Totais confirmados por competencia (receitas e despesas), so para os meses
-    // da serie; o recorte por mes e em memoria.
+    // da serie; o recorte por mes e em memoria e cada valor e convertido para a
+    // moeda de reporte pela taxa vigente na data do lancamento.
     const totals: Record<string, MonthTotals> = {};
     for (const monthKey of series) totals[monthKey] = { income: '0.00', expense: '0.00' };
     const centsByMonth = new Map<string, { income: number; expense: number }>();
     for (const transaction of transactions) {
       const key = transaction.effectiveDate.toISOString().slice(0, 7);
       if (!(key in totals)) continue;
+      const converted = convertCents(
+        cents(transaction.totalAmount),
+        transaction.currency,
+        baseCurrency,
+        rates,
+        transaction.effectiveDate.toISOString(),
+      );
+      if (converted === null) continue;
       const bucket = centsByMonth.get(key) ?? { income: 0, expense: 0 };
-      if (transaction.type === 'income') bucket.income += cents(transaction.totalAmount);
-      else bucket.expense += cents(transaction.totalAmount);
+      if (transaction.type === 'income') bucket.income += converted;
+      else bucket.expense += converted;
       centsByMonth.set(key, bucket);
     }
     for (const [key, bucket] of centsByMonth) {

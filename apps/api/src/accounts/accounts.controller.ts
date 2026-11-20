@@ -47,12 +47,17 @@ export class AccountsController {
     @CurrentUser() _user: AuthenticatedUser,
   ): Promise<Account> {
     return this.prisma.$transaction(async (tx) => {
+      // Sem moeda informada, a conta segue a moeda de reporte do espaco.
+      const space = await tx.financialSpace.findUnique({
+        where: { id: spaceId },
+        select: { primaryCurrency: true },
+      });
       const account = await tx.account.create({
         data: {
           financialSpaceId: spaceId,
           name: body.name,
           type: body.type,
-          currency: body.currency ?? 'BRL',
+          currency: body.currency ?? space?.primaryCurrency ?? 'BRL',
           initialBalance: body.initialBalance ?? '0',
           initialBalanceDate: body.initialBalanceDate ? toDate(body.initialBalanceDate) : new Date(),
           institution: body.institution,

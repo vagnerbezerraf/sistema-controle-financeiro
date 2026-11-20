@@ -23,6 +23,7 @@ import {
   Users,
   ChevronsUpDown,
   Filter,
+  Coins,
 } from 'lucide-react';
 import { cls } from '@/lib/format';
 
@@ -39,6 +40,7 @@ const navItems: NavItem[] = [
   { href: '/app/accounts', label: 'Contas', icon: Wallet },
   { href: '/app/categories', label: 'Categorias', icon: Tags },
   { href: '/app/categorization-rules', label: 'Regras de categorizacao', icon: Filter },
+  { href: '/app/exchange-rates', label: 'Taxas de cambio', icon: Coins },
   { href: '/app/calendar', label: 'Calendario', icon: CalendarRange },
   { href: '/app/obligations', label: 'Contas a pagar', icon: CalendarClock },
   { href: '/app/alerts', label: 'Alertas', icon: BellRing },

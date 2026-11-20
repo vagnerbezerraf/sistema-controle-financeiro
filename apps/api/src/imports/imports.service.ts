@@ -119,6 +119,12 @@ export class ImportsService {
     // importado ja nasce categorizado, sem exigir a aplicacao retroativa depois.
     const rules = await this.categorization.loadRuleInputs(spaceId);
 
+    // O extrato nao traz a moeda; ela vem da conta de destino do lote.
+    const account = await this.prisma.account.findUniqueOrThrow({
+      where: { id: batch.accountId },
+      select: { currency: true },
+    });
+
     const updated = await this.prisma.$transaction(async (tx) => {
       const createdIds: string[] = [];
       for (const row of valid) {
@@ -133,7 +139,7 @@ export class ImportsService {
             status: 'confirmed',
             description: row.description,
             categoryId,
-            currency: 'BRL',
+            currency: account.currency,
             totalAmount: row.amount as string,
             effectiveDate: toDate(row.date as string),
             postings: {

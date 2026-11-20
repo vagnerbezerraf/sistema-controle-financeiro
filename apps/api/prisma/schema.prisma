@@ -159,6 +159,7 @@ model FinancialSpace {
   invites         SpaceInvite[]
   attachments     Attachment[]
   categorizationRules CategorizationRule[]
+  exchangeRates   ExchangeRate[]
 
   @@unique([id])
   @@map("financial_spaces")
@@ -574,6 +575,29 @@ model Attachment {
   @@index([financialSpaceId, transactionId])
   @@index([financialSpaceId, checksum])
   @@map("attachments")
+}
+
+// Taxa de cambio entre duas moedas do espaco (Fase 5, multiplas moedas). Uma
+// taxa vale a partir de `asOf` (inclusive) ate ser substituida por outra taxa
+// mais recente do mesmo par; a conversao de totais consolidados usa a taxa
+// vigente na data do lancamento. Metricas por par: `rate` = quantas unidades de
+// `toCurrency` valem 1 de `fromCurrency`.
+model ExchangeRate {
+  id               String       @id @default(uuid())
+  financialSpaceId String
+  fromCurrency     CurrencyCode
+  toCurrency       CurrencyCode
+  rate             Decimal      @db.Decimal(19, 4)
+  asOf             DateTime     @db.Date
+  source           String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  version          Int          @default(0)
+
+  financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+
+  @@unique([financialSpaceId, fromCurrency, toCurrency, asOf])
+  @@map("exchange_rates")
 }
 
 // Regras de categorizacao automatica (Fase 5): casam a descricao do lancamento

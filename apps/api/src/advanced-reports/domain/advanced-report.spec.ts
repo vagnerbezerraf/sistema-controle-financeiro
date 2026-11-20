@@ -12,7 +12,10 @@ const conta = (over: Partial<NetWorthAccountInput> = {}): NetWorthAccountInput =
   id: 'acc-1',
   name: 'Conta corrente',
   type: 'checking',
+  currency: 'BRL',
   balance: '1000.00',
+  // Por padrao a conta ja esta na moeda de reporte (saldo igual ao convertido).
+  balanceInBase: over.balance ?? '1000.00',
   ...over,
 });
 
@@ -24,12 +27,13 @@ describe('advanced-report · patrimonio liquido', () => {
   });
 
   it('soma ativos, passivos (modulo da divida) e o patrimonio liquido', () => {
-    const view = computeNetWorth([
+    const view = computeNetWorth('BRL', [
       conta({ id: 'a1', balance: '1000.00' }),
       conta({ id: 'a2', type: 'savings', balance: '500.00' }),
       conta({ id: 'c1', type: 'credit_card', balance: '-300.00' }),
     ]);
 
+    expect(view.currency).toBe('BRL');
     expect(view.assets).toBe('1500.00');
     expect(view.liabilities).toBe('300.00');
     expect(view.netWorth).toBe('1200.00');
@@ -38,12 +42,33 @@ describe('advanced-report · patrimonio liquido', () => {
       accountId: 'c1',
       name: 'Conta corrente',
       type: 'credit_card',
+      currency: 'BRL',
       balance: '-300.00',
+      balanceInBase: '-300.00',
     });
   });
 
+  it('soma pelo saldo convertido, preservando a moeda da conta', () => {
+    const view = computeNetWorth('BRL', [
+      conta({ id: 'a1', currency: 'USD', balance: '100.00', balanceInBase: '500.00' }),
+    ]);
+
+    expect(view.assets).toBe('500.00');
+    expect(view.accounts[0]).toMatchObject({ currency: 'USD', balance: '100.00', balanceInBase: '500.00' });
+  });
+
+  it('mantem a conta listada mas fora das somas quando nao ha taxa de cambio', () => {
+    const view = computeNetWorth('BRL', [
+      conta({ id: 'a1', currency: 'USD', balance: '100.00', balanceInBase: null }),
+    ]);
+
+    expect(view.assets).toBe('0.00');
+    expect(view.netWorth).toBe('0.00');
+    expect(view.accounts[0]).toMatchObject({ currency: 'USD', balance: '100.00', balanceInBase: null });
+  });
+
   it('nao transforma credito a favor no cartao em passivo negativo', () => {
-    const view = computeNetWorth([conta({ type: 'credit_card', balance: '50.00' })]);
+    const view = computeNetWorth('BRL', [conta({ type: 'credit_card', balance: '50.00' })]);
 
     expect(view.assets).toBe('0.00');
     expect(view.liabilities).toBe('0.00');
@@ -51,9 +76,10 @@ describe('advanced-report · patrimonio liquido', () => {
   });
 
   it('devolve zeros quando nao ha contas', () => {
-    const view = computeNetWorth([]);
+    const view = computeNetWorth('BRL', []);
 
     expect(view).toEqual({
+      currency: 'BRL',
       assets: '0.00',
       liabilities: '0.00',
       netWorth: '0.00',

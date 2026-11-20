@@ -13,6 +13,7 @@
 import type {
   AccountType,
   AdvancedReportView,
+  CurrencyCode,
   MonthlyEvolutionPoint,
   NetWorthAccount,
   NetWorthView,
@@ -27,13 +28,17 @@ export const MAX_EVOLUTION_MONTHS = 24;
 const cents = (amount: string): number => Math.round(Number(amount) * 100);
 const toAmount = (value: number): string => (value / 100).toFixed(2);
 
-/** Conta ativa com o saldo realizado ja apurado pelo chamador. */
+/** Conta ativa com o saldo realizado e a conversao para a moeda de reporte. */
 export interface NetWorthAccountInput {
   id: string;
   name: string;
   type: AccountType;
+  /** Moeda da conta; `balance` esta nessa moeda. */
+  currency: CurrencyCode;
   /** Saldo assinado: positivo em ativos, negativo em passivos (cartao). */
   balance: string;
+  /** Saldo ja convertido para a moeda de reporte; `null` quando nao ha taxa. */
+  balanceInBase: string | null;
 }
 
 /** Totais realizados de um mes, ja normalizados pelo chamador. */
@@ -48,29 +53,37 @@ export function isLiabilityAccount(type: AccountType): boolean {
 }
 
 /**
- * Patrimonio liquido = ativos - passivos. O saldo do cartao ja vem negativo
- * (a divida), entao o passivo e o modulo desse saldo — saldo positivo em um
- * cartao (credito a favor) nao vira passivo negativo.
+ * Patrimonio liquido = ativos - passivos, tudo na moeda de reporte
+ * (`baseCurrency`). O saldo do cartao ja vem negativo (a divida), entao o
+ * passivo e o modulo desse saldo — saldo positivo em um cartao (credito a
+ * favor) nao vira passivo negativo. Uma conta sem taxa de cambio fica listada,
+ * mas fora das somas: misturar moedas seria pior do que omitir.
  */
-export function computeNetWorth(accounts: NetWorthAccountInput[]): NetWorthView {
+export function computeNetWorth(baseCurrency: CurrencyCode, accounts: NetWorthAccountInput[]): NetWorthView {
   let assets = 0;
   let liabilities = 0;
   const rows: NetWorthAccount[] = [];
 
   for (const account of accounts) {
     const balance = cents(account.balance);
-    if (isLiabilityAccount(account.type)) liabilities += Math.max(0, -balance);
-    else assets += balance;
+    if (account.balanceInBase !== null) {
+      const converted = cents(account.balanceInBase);
+      if (isLiabilityAccount(account.type)) liabilities += Math.max(0, -converted);
+      else assets += converted;
+    }
 
     rows.push({
       accountId: account.id,
       name: account.name,
       type: account.type,
+      currency: account.currency,
       balance: toAmount(balance),
+      balanceInBase: account.balanceInBase,
     });
   }
 
   return {
+    currency: baseCurrency,
     assets: toAmount(assets),
     liabilities: toAmount(liabilities),
     netWorth: toAmount(assets - liabilities),

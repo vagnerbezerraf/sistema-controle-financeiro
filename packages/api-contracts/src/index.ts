@@ -140,6 +140,40 @@ export interface UpdateAccountRequest {
   state?: 'active' | 'archived';
 }
 
+/**
+ * Taxa de cambio de `fromCurrency` para `toCurrency`, vigente a partir de
+ * `asOf` (inclusive) ate ser substituida por uma taxa mais recente do mesmo par.
+ */
+export interface ExchangeRate {
+  id: string;
+  financialSpaceId: string;
+  fromCurrency: CurrencyCode;
+  toCurrency: CurrencyCode;
+  /** Quantas unidades de `toCurrency` valem 1 unidade de `fromCurrency`. */
+  rate: MoneyAmount;
+  asOf: IsoDate;
+  /** Origem informada pelo usuario (ex.: banco central); livre. */
+  source?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface CreateExchangeRateRequest {
+  fromCurrency: CurrencyCode;
+  toCurrency: CurrencyCode;
+  rate: MoneyAmount;
+  asOf?: IsoDate;
+  source?: string;
+}
+
+export interface UpdateExchangeRateRequest {
+  rate?: MoneyAmount;
+  asOf?: IsoDate;
+  source?: string;
+  version?: number;
+}
+
 export type CategoryType = 'income' | 'expense' | 'both';
 
 export interface Category {
@@ -704,6 +738,8 @@ export interface Paginated<T> {
 export interface DashboardSummary {
   periodStart: IsoDate;
   periodEnd: IsoDate;
+  /** Moeda de reporte do espaco: os totais ja vem convertidos para ela. */
+  currency: CurrencyCode;
   totalIncome: MoneyAmount;
   totalExpense: MoneyAmount;
   netBalance: MoneyAmount;
@@ -711,6 +747,11 @@ export interface DashboardSummary {
   projectedBalance: MoneyAmount;
   upcomingDueCount: number;
   upcomingDueAmount: MoneyAmount;
+  /**
+   * Quantos lancamentos do periodo foram ignorados nos totais por nao haver
+   * taxa de cambio da moeda do lancamento para a moeda de reporte.
+   */
+  unconvertedCount: number;
 }
 
 /** Totais realizados de um mes (receitas, despesas e liquido, ja em `MoneyAmount`). */
@@ -754,12 +795,22 @@ export interface NetWorthAccount {
   accountId: string;
   name: string;
   type: AccountType;
+  /** Moeda da conta; `balance` esta nessa moeda. */
+  currency: CurrencyCode;
   /** Saldo assinado: positivo em ativos, negativo em cartoes (passivo). */
   balance: MoneyAmount;
+  /**
+   * Saldo convertido para a moeda de reporte do espaco (`NetWorthView.currency`).
+   * Igual a `balance` quando a conta ja esta na moeda de reporte; `null` quando
+   * nao existe taxa de cambio para a conversao.
+   */
+  balanceInBase: MoneyAmount | null;
 }
 
 /** Patrimonio liquido (Fase 4): ativos menos passivos, com o detalhe por conta. */
 export interface NetWorthView {
+  /** Moeda de reporte do espaco: ativos, passivos e patrimonio vem nela. */
+  currency: CurrencyCode;
   assets: MoneyAmount;
   liabilities: MoneyAmount;
   netWorth: MoneyAmount;

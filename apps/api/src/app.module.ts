@@ -24,6 +24,7 @@ import { AdvancedReportsModule } from './advanced-reports/advanced-reports.modul
 import { ScenariosModule } from './scenarios/scenario.module';
 import { ImportsModule } from './imports/imports.module';
 import { CategorizationModule } from './categorization/categorization.module';
+import { CurrencyModule } from './currency/currency.module';
 import { ReconciliationModule } from './reconciliation/reconciliation.module';
 import { MembersModule } from './members/members.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -99,6 +100,7 @@ import { TelemetryService } from './telemetry/telemetry.service';
     ScenariosModule,
     ImportsModule,
     CategorizationModule,
+    CurrencyModule,
     ReconciliationModule,
     MembersModule,
     NotificationsModule,

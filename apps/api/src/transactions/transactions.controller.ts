@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Prisma, PrismaClient, Transaction, TransactionStatus, TransactionType } from '@prisma/client';
+import { Prisma, PrismaClient, CurrencyCode, Transaction, TransactionStatus, TransactionType } from '@prisma/client';
 import {
   JwtAuthGuard,
   Roles,
@@ -25,6 +25,8 @@ import {
 import { CreateTransactionRequest, ReverseTransactionRequest } from './http/dto';
 import { toDate } from '../common/utils/date';
 import { toCsv } from '../common/utils/csv';
+import { CurrencyService } from '../currency/currency.service';
+import { convertCents } from '../currency/domain/exchange-rate';
 
 /** Teto de linhas da exportacao, para nao gerar um CSV ilimitado. */
 const EXPORT_ROW_LIMIT = 10_000;
@@ -40,7 +42,10 @@ function exportFileName(from?: string, to?: string): string {
 @UseGuards(JwtAuthGuard, SpaceRoleGuard)
 @ApiBearerAuth('access-token')
 export class TransactionsController {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly currency: CurrencyService,
+  ) {}
 
   @Get()
   @Roles(['owner', 'admin', 'contributor', 'viewer'])
@@ -136,6 +141,10 @@ export class TransactionsController {
   ) {
     this.validatePostings(body);
 
+    // Moeda do lancamento: a informada ou, na falta, a da conta envolvida. Tambem
+    // barra transferencia entre contas de moedas diferentes.
+    const currency = await this.resolveCurrency(spaceId, body);
+
     if (idempotencyKey) {
       const existing = await this.prisma.idempotencyRecord.findUnique({
         where: { financialSpaceId_idempotencyKey: { financialSpaceId: spaceId, idempotencyKey } },
@@ -152,7 +161,7 @@ export class TransactionsController {
           description: body.description,
           notes: body.notes,
           categoryId: body.categoryId,
-          currency: body.currency ?? 'BRL',
+          currency,
           totalAmount: body.totalAmount,
           effectiveDate: toDate(body.effectiveDate),
           dueDate: body.dueDate ? toDate(body.dueDate) : undefined,
@@ -328,20 +337,38 @@ export class TransactionsController {
       effectiveDate: { gte: startDate, lte: endDate },
       status: { not: 'canceled' },
     } as const;
+
+    // Todos os totais sao apresentados na moeda de reporte do espaco: cada
+    // lancamento e convertido pela taxa vigente na sua data. O que nao tiver
+    // taxa entra em `unconvertedCount` e fica fora das somas.
+    const { baseCurrency, rates } = await this.currency.loadContext(spaceId);
+    const toBase = (t: { totalAmount: Prisma.Decimal; currency: CurrencyCode; effectiveDate: Date }): number | null =>
+      convertCents(Math.round(Number(t.totalAmount) * 100), t.currency, baseCurrency, rates, t.effectiveDate.toISOString());
+    const fromCents = (value: number): string => (value / 100).toFixed(2);
+
     const transactions = await this.prisma.transaction.findMany({ where, include: { postings: true } });
 
-    let totalIncome = '0';
-    let totalExpense = '0';
-    let realizedBalance = '0';
+    let totalIncome = 0;
+    let totalExpense = 0;
+    let realizedBalance = 0;
+    let unconvertedCount = 0;
 
     for (const t of transactions) {
-      const amount = Number(t.totalAmount);
-      if (t.status === 'confirmed' && t.type === 'income') totalIncome = (Number(totalIncome) + amount).toFixed(2);
-      if (t.status === 'confirmed' && t.type === 'expense') totalExpense = (Number(totalExpense) + amount).toFixed(2);
-      if (t.status === 'confirmed') {
-        if (t.type === 'income') realizedBalance = (Number(realizedBalance) + amount).toFixed(2);
-        if (t.type === 'expense') realizedBalance = (Number(realizedBalance) - amount).toFixed(2);
-        if (t.type === 'adjustment') realizedBalance = (Number(realizedBalance) + amount).toFixed(2);
+      if (t.status !== 'confirmed') continue;
+      if (t.type !== 'income' && t.type !== 'expense' && t.type !== 'adjustment') continue;
+      const amount = toBase(t);
+      if (amount === null) {
+        unconvertedCount += 1;
+        continue;
+      }
+      if (t.type === 'income') {
+        totalIncome += amount;
+        realizedBalance += amount;
+      } else if (t.type === 'expense') {
+        totalExpense += amount;
+        realizedBalance -= amount;
+      } else {
+        realizedBalance += amount;
       }
     }
 
@@ -355,17 +382,58 @@ export class TransactionsController {
       orderBy: [{ dueDate: 'asc' }],
     });
 
+    let projectedBalance = realizedBalance;
+    let upcomingDueAmount = 0;
+    for (const t of upcoming) {
+      const amount = toBase(t);
+      if (amount === null) {
+        unconvertedCount += 1;
+        continue;
+      }
+      projectedBalance += t.type === 'income' ? amount : -amount;
+      if (t.type === 'expense') upcomingDueAmount += amount;
+    }
+
     return {
       periodStart: start,
       periodEnd: end,
-      totalIncome,
-      totalExpense,
-      netBalance: (Number(totalIncome) - Number(totalExpense)).toFixed(2),
-      realizedBalance,
-      projectedBalance: (Number(realizedBalance) + upcoming.reduce((acc, t) => acc + (t.type === 'income' ? Number(t.totalAmount) : -Number(t.totalAmount)), 0)).toFixed(2),
+      currency: baseCurrency,
+      totalIncome: fromCents(totalIncome),
+      totalExpense: fromCents(totalExpense),
+      netBalance: fromCents(totalIncome - totalExpense),
+      realizedBalance: fromCents(realizedBalance),
+      projectedBalance: fromCents(projectedBalance),
       upcomingDueCount: upcoming.length,
-      upcomingDueAmount: upcoming.filter((t) => t.type === 'expense').reduce((acc, t) => acc + Number(t.totalAmount), 0).toFixed(2),
+      upcomingDueAmount: fromCents(upcomingDueAmount),
+      unconvertedCount,
     };
+  }
+
+  /**
+   * Resolve a moeda do lancamento: a informada pelo cliente ou, na falta, a da
+   * conta envolvida (e a moeda de reporte do espaco quando nao ha conta). Numa
+   * transferencia exige que todas as contas estejam na mesma moeda: cambio
+   * explicito numa transferencia fica fora do escopo desta fatia.
+   */
+  private async resolveCurrency(spaceId: string, body: CreateTransactionRequest): Promise<CurrencyCode> {
+    const accountIds = [...new Set(body.postings.map((p) => p.accountId))];
+    const accounts = accountIds.length
+      ? await this.prisma.account.findMany({
+          where: { id: { in: accountIds }, financialSpaceId: spaceId },
+          select: { currency: true },
+        })
+      : [];
+    const currencies = [...new Set(accounts.map((a) => a.currency))];
+
+    if (body.type === 'transfer' && currencies.length > 1) {
+      throw new BadRequestException({
+        code: 'CURRENCY_MISMATCH',
+        message: 'Transferencia exige contas na mesma moeda',
+      });
+    }
+
+    if (body.currency) return body.currency;
+    return currencies[0] ?? (await this.currency.getBaseCurrency(spaceId));
   }
 
   /** Filtro compartilhado entre a listagem paginada e a exportacao em CSV. */

@@ -120,7 +120,7 @@ Adicionar automação externa somente depois de o núcleo estar estável.
 - Sincronização incremental.
 - ✅ **Regras avançadas de categorização** — entregue (1ª fatia da Fase 5): CRUD com precedência, casamento pela descrição, aplicação retroativa e categorização no commit da importação; ver checklist §2.34.
 - Relatórios assíncronos.
-- Múltiplas moedas.
+- ✅ **Múltiplas moedas** — entregue (2ª fatia da Fase 5): taxas de câmbio por par com vigência por data, conversão dos totais consolidados (dashboard e patrimônio líquido) para a moeda de reporte do espaço, taxa inversa/identidade, contagem de lançamentos sem taxa e bloqueio de transferência entre moedas diferentes, com paridade Web/Desktop/Mobile; ver checklist §2.35.
 - Modo offline completo.
 - Distribuição oficial do desktop para sistemas operacionais ainda não cobertos.
 - Separação física de módulos que apresentem gargalo comprovado.

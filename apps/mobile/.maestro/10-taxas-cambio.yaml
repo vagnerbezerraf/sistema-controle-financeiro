@@ -1,0 +1,48 @@
+appId: host.exp.exponent
+---
+- openLink: "exp://10.0.2.2:8081"
+- runFlow: scripts/ensure-logged-in.yaml
+
+# Abre a aba de taxas de cambio
+- tapOn:
+    id: "tab-cambio"
+- extendedWaitUntil:
+    visible: ".*Converta lancamentos de outras moedas.*"
+    timeout: 20000
+- assertVisible: "Taxas de cambio"
+
+# Cria uma taxa USD -> BRL
+- tapOn:
+    id: "taxa-nova"
+- tapOn:
+    id: "taxa-valor"
+- inputText: "5.2500"
+- hideKeyboard
+- tapOn:
+    id: "taxa-salvar"
+
+# A taxa recem-criada aparece na lista com as moedas do par
+- extendedWaitUntil:
+    visible: ".*1 USD = 5.2500 BRL.*"
+    timeout: 20000
+
+# Edita o valor da taxa
+- tapOn:
+    id: "taxa-editar-.*"
+- tapOn:
+    id: "taxa-novo-valor-.*"
+- eraseText
+- inputText: "5.4000"
+- hideKeyboard
+- tapOn:
+    id: "taxa-salvar-edicao-.*"
+- extendedWaitUntil:
+    visible: ".*1 USD = 5.4000 BRL.*"
+    timeout: 20000
+
+# Remove a taxa; nenhuma linha deve restar
+- tapOn:
+    id: "taxa-remover-.*"
+- extendedWaitUntil:
+    visible: "Nenhuma taxa cadastrada. Cadastre uma para somar lancamentos de outras moedas."
+    timeout: 20000
