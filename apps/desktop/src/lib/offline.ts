@@ -44,14 +44,17 @@ export function setOfflineTransport(next: OfflineTransport): void {
 
 let online = typeof navigator !== 'undefined' ? navigator.onLine : true;
 let pending = 0;
+let conflicts = 0;
 
 const listeners = new Set<() => void>();
 function emit(): void {
   for (const listener of listeners) listener();
 }
 
-async function refreshPending(): Promise<void> {
-  pending = (await offlineQueue.list()).length;
+async function refreshCounts(): Promise<void> {
+  const queue = await offlineQueue.list();
+  pending = queue.length;
+  conflicts = queue.filter((m) => m.status === 'conflict').length;
   emit();
 }
 
@@ -67,9 +70,9 @@ export const offlineQueue = createOfflineQueue({
 });
 
 offlineQueue.subscribe(() => {
-  void refreshPending();
+  void refreshCounts();
 });
-void refreshPending();
+void refreshCounts();
 
 export function isOnline(): boolean {
   return online;
@@ -95,14 +98,19 @@ export function subscribeOffline(listener: () => void): () => void {
   };
 }
 
-/** Snapshot estavel para useSyncExternalStore: `<online|offline>|<pendentes>`. */
+/** Snapshot estavel para useSyncExternalStore: `<online|offline>|<pendentes>|<conflitos>`. */
 export function getOfflineSnapshot(): string {
-  return `${online ? 'online' : 'offline'}|${pending}`;
+  return `${online ? 'online' : 'offline'}|${pending}|${conflicts}`;
 }
 
 /** Tenta reenviar as mutacoes guardadas (botao manual ou reconexao). */
 export async function flushOfflineQueue(includeFailed = false): Promise<void> {
   await offlineQueue.flush({ includeFailed });
+}
+
+/** Reconciliacao: descarta as mutacoes em conflito (mantem a copia do servidor). */
+export async function discardOfflineConflicts(): Promise<number> {
+  return offlineQueue.discardConflicts();
 }
 
 if (typeof window !== 'undefined') {

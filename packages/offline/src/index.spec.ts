@@ -7,6 +7,7 @@ import {
   createOfflineQueue,
   generateIdempotencyKey,
   isCacheFresh,
+  isConflictError,
   isMutationMethod,
   orderQueue,
   type OfflineMutation,
@@ -68,6 +69,15 @@ describe('helpers puros', () => {
     expect(isCacheFresh(record, 1500, 1000)).toBe(true);
     expect(isCacheFresh(record, 2500, 1000)).toBe(false);
     expect(isCacheFresh(record, 999_999, 0)).toBe(true);
+  });
+
+  it('reconhece conflito por status 409 ou pelo codigo STALE_VERSION', () => {
+    expect(isConflictError({ status: 409 })).toBe(true);
+    expect(isConflictError({ status: 409, code: 'STALE_VERSION' })).toBe(true);
+    expect(isConflictError({ status: 400, code: 'STALE_VERSION' })).toBe(true);
+    expect(isConflictError({ status: 500 })).toBe(false);
+    expect(isConflictError(new Error('sem rede'))).toBe(false);
+    expect(isConflictError(null)).toBe(false);
   });
 });
 
@@ -242,6 +252,67 @@ describe('fila de escritas', () => {
 
     expect(retry).toEqual({ synced: 1, failed: 0, remaining: 0 });
     expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('retem conflitos sem consumir tentativas nem reenviar automaticamente', async () => {
+    const conflict = Object.assign(new Error('versao desatualizada'), { status: 409, code: 'STALE_VERSION' });
+    const { queue, send } = setup({
+      send: async () => {
+        throw conflict;
+      },
+      maxAttempts: 3,
+      baseDelayMs: 1,
+    });
+    await queue.enqueue({ method: 'PATCH', path: '/a' });
+
+    const result = await queue.flush();
+
+    expect(result).toEqual({ synced: 0, failed: 0, remaining: 1 });
+    const [stored] = await queue.list();
+    expect(stored.status).toBe('conflict');
+    expect(stored.attempts).toBe(0);
+    expect(stored.lastError).toBe('versao desatualizada');
+    expect(await queue.conflictCount()).toBe(1);
+
+    // Um novo flush nao tenta reenviar o conflito.
+    await queue.flush();
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('reprocessa conflitos com includeFailed quando a versao se alinha', async () => {
+    let conflicting = true;
+    const { queue, send } = setup({
+      send: async () => {
+        if (conflicting) throw Object.assign(new Error('conflito'), { status: 409 });
+      },
+    });
+    await queue.enqueue({ method: 'PATCH', path: '/a' });
+    await queue.flush();
+    expect(await queue.conflictCount()).toBe(1);
+
+    conflicting = false;
+    const result = await queue.flush({ includeFailed: true });
+
+    expect(result).toEqual({ synced: 1, failed: 0, remaining: 0 });
+    expect(await queue.conflictCount()).toBe(0);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('descarta os conflitos na reconciliacao manual', async () => {
+    const { queue } = setup({
+      send: async () => {
+        throw Object.assign(new Error('conflito'), { status: 409 });
+      },
+    });
+    await queue.enqueue({ method: 'PATCH', path: '/a' });
+    await queue.enqueue({ method: 'PATCH', path: '/b' });
+    await queue.flush();
+
+    const removed = await queue.discardConflicts();
+
+    expect(removed).toBe(2);
+    expect(await queue.conflictCount()).toBe(0);
+    expect(await queue.pendingCount()).toBe(0);
   });
 
   it('recupera mutacoes presas em syncing (crash durante o flush)', async () => {

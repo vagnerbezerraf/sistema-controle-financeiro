@@ -475,6 +475,9 @@ importers:
       '@scf/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
+      '@scf/offline':
+        specifier: workspace:*
+        version: link:../../packages/offline
       '@scf/validation':
         specifier: workspace:*
         version: link:../../packages/validation

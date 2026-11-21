@@ -27,6 +27,7 @@ import {
   Download,
 } from 'lucide-react';
 import { cls } from '@/lib/format';
+import OfflineBanner from '@/components/OfflineBanner';
 
 interface NavItem {
   href: string;
@@ -135,6 +136,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {navItems.find((n) => pathname?.startsWith(n.href))?.label ?? 'SCF'}
           </div>
           <div className="flex items-center gap-2 text-sm">
+            <OfflineBanner />
             <Link href="/app/transactions/new" className="btn-primary hidden sm:inline-flex">
               <ArrowLeftRight className="h-4 w-4" />
               Novo lancamento

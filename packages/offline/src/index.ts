@@ -1,14 +1,16 @@
 /**
- * Suporte offline compartilhado entre Desktop e Mobile.
+ * Suporte offline compartilhado entre Web, Desktop e Mobile.
  *
  * Duas pecas, ambas puras e testaveis sem rede nem banco:
  * - OfflineQueue: fila de escritas (mutacoes) que sobrevive a queda de rede,
  *   reexecutavel em ordem com backoff e chave de idempotencia (evita duplicar
- *   quando o pedido e reenviado).
+ *   quando o pedido e reenviado). Conflitos (ex.: versao desatualizada na
+ *   concorrencia otimista) nao entram em retentativa automatica: ficam marcados
+ *   como `conflict` para reconciliacao manual.
  * - OfflineCache: cache de leitura (write-through) para servir dados ja vistos
  *   quando o app esta offline.
  *
- * A persistencia fica atras de KeyValueStore (localStorage no Desktop,
+ * A persistencia fica atras de KeyValueStore (localStorage no Web/Desktop,
  * SecureStore no Mobile) e o envio atras de OfflineTransport, o que torna a
  * logica totalmente testavel com implementacoes em memoria.
  */
@@ -22,7 +24,7 @@ export interface PendingRequest {
   spaceId?: string;
 }
 
-export type OfflineMutationStatus = 'pending' | 'syncing' | 'failed';
+export type OfflineMutationStatus = 'pending' | 'syncing' | 'failed' | 'conflict';
 
 export interface OfflineMutation extends PendingRequest {
   /** Identificador local da mutacao (nao vai para a API). */
@@ -66,6 +68,22 @@ export interface OfflineTransport {
 // Helpers puros
 // ---------------------------------------------------------------------------
 
+/** Codigo devolvido pela API quando a `version` enviada ficou desatualizada. */
+export const STALE_VERSION_CODE = 'STALE_VERSION';
+
+/**
+ * Reconhece um conflito de escrita a partir do erro da API: HTTP 409
+ * (`Conflict`) ou o codigo `STALE_VERSION` da concorrencia otimista. Conflitos
+ * nao entram em retentativa automatica — reenviar o mesmo corpo daria 409 de
+ * novo —, entao a fila os marca como `conflict` para reconciliacao manual.
+ */
+export function isConflictError(error: unknown): boolean {
+  const candidate = error as { status?: number; code?: string } | null;
+  if (!candidate) return false;
+  if (candidate.status === 409) return true;
+  return candidate.code === STALE_VERSION_CODE;
+}
+
 export function isMutationMethod(method: HttpMethod): boolean {
   return method !== 'GET';
 }
@@ -84,7 +102,7 @@ export function backoffDelayMs(attempts: number, baseMs = 1000, maxMs = 60_000):
 }
 
 export function isReadyToSync(mutation: OfflineMutation, now: number): boolean {
-  if (mutation.status === 'failed') return false;
+  if (mutation.status === 'failed' || mutation.status === 'conflict') return false;
   return mutation.nextAttemptAt <= now;
 }
 
@@ -144,10 +162,12 @@ export interface OfflineQueueDeps {
   baseDelayMs?: number;
   maxDelayMs?: number;
   queueKey?: string;
+  /** Reconhece erro de conflito (padrao: `isConflictError`). */
+  isConflict?: (error: unknown) => boolean;
 }
 
 export interface FlushOptions {
-  /** Reprocessa tambem as mutacoes marcadas como 'failed' (botao manual). */
+  /** Reprocessa tambem as mutacoes `failed`/`conflict` (botao manual). */
   includeFailed?: boolean;
 }
 
@@ -155,8 +175,11 @@ export interface OfflineQueue {
   enqueue(req: PendingRequest): Promise<OfflineMutation>;
   list(): Promise<OfflineMutation[]>;
   pendingCount(): Promise<number>;
+  conflictCount(): Promise<number>;
   flush(options?: FlushOptions): Promise<FlushResult>;
   discard(id: string): Promise<void>;
+  /** Remove todas as mutacoes em conflito (reconciliacao: descartar o local). */
+  discardConflicts(): Promise<number>;
   subscribe(listener: () => void): () => void;
 }
 
@@ -170,6 +193,7 @@ export function createOfflineQueue(deps: OfflineQueueDeps): OfflineQueue {
     baseDelayMs = 1000,
     maxDelayMs = 60_000,
     queueKey = 'scf.offline.queue',
+    isConflict = isConflictError,
   } = deps;
 
   const listeners = new Set<() => void>();
@@ -190,9 +214,11 @@ export function createOfflineQueue(deps: OfflineQueueDeps): OfflineQueue {
       return { synced: 0, failed: 0, remaining: queue.length };
     }
 
-    // Reprocessa 'failed' quando pedido explicitamente (sync manual).
+    // Reprocessa 'failed'/'conflict' quando pedido explicitamente (sync manual).
     const normalized: OfflineMutation[] = options.includeFailed
-      ? queue.map((m): OfflineMutation => (m.status === 'failed' ? { ...m, status: 'pending', nextAttemptAt: 0 } : m))
+      ? queue.map((m): OfflineMutation =>
+          m.status === 'failed' || m.status === 'conflict' ? { ...m, status: 'pending', nextAttemptAt: 0 } : m,
+        )
       : queue;
 
     const at = now();
@@ -211,8 +237,15 @@ export function createOfflineQueue(deps: OfflineQueueDeps): OfflineQueue {
         await transport.send(mutation);
         synced += 1;
       } catch (error) {
-        const attempts = mutation.attempts + 1;
         const message = error instanceof Error ? error.message : String(error);
+        // Conflito (ex.: versao desatualizada): nao adianta reenviar o mesmo
+        // corpo, entao fica retido para reconciliacao manual em vez de consumir
+        // tentativas no backoff.
+        if (isConflict(error)) {
+          next.push({ ...mutation, status: 'conflict', lastError: message } satisfies OfflineMutation);
+          continue;
+        }
+        const attempts = mutation.attempts + 1;
         if (attempts >= maxAttempts) {
           failed += 1;
           next.push({ ...mutation, attempts, status: 'failed', lastError: message } satisfies OfflineMutation);
@@ -256,6 +289,10 @@ export function createOfflineQueue(deps: OfflineQueueDeps): OfflineQueue {
       return (await load()).length;
     },
 
+    async conflictCount() {
+      return (await load()).filter((m) => m.status === 'conflict').length;
+    },
+
     flush(options = {}) {
       // Um flush por vez: disparos concorrentes (reconexao + intervalo + uma
       // leitura que voltou) compartilham a mesma execucao e nao duplicam envios.
@@ -269,6 +306,14 @@ export function createOfflineQueue(deps: OfflineQueueDeps): OfflineQueue {
     async discard(id) {
       const queue = await load();
       await save(queue.filter((m) => m.id !== id));
+    },
+
+    async discardConflicts() {
+      const queue = await load();
+      const kept = queue.filter((m) => m.status !== 'conflict');
+      const removed = queue.length - kept.length;
+      if (removed > 0) await save(kept);
+      return removed;
     },
 
     subscribe(listener) {
