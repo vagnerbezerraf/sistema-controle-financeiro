@@ -63,7 +63,7 @@ Representar obrigações futuras sem distorcer o saldo realizado.
 - Contas a pagar e receber.
 - Calendário financeiro.
 - Alertas de vencimento.
-- Worker, outbox e fila, se necessários.
+- Worker, outbox e fila: outbox transacional drenado pelo worker (retry/backoff/dead-letter) e jobs de **recorrências** (top-up do horizonte, reexecutável) e **lembretes de vencimento** (e-mail por membro com horário silencioso e idempotência diária); ver checklist §2.20 e §2.37.
 
 ### Critério de saída
 

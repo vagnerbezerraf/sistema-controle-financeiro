@@ -6,11 +6,18 @@ import { PrismaClient } from '@prisma/client';
 import { pino } from 'pino';
 import { createOutboxDrainer, createPrismaOutboxStore, type OutboxEventRecord } from './outbox';
 import { createPrismaReportStore, createReportProcessor } from './reports';
+import { createPrismaRecurrenceStore, createRecurrenceProcessor } from './recurrence';
+import { createLogNotifier, createPrismaReminderStore, createReminderProcessor } from './reminders';
 
 const logger = pino({ name: 'scf-worker' });
 
 /** Intervalo do ciclo que drena o outbox transacional. */
 const OUTBOX_POLL_INTERVAL_MS = 30_000;
+
+/** Agenda diaria (cron) dos jobs periodicos, no fuso do negocio. */
+const RECURRENCE_CRON = '0 3 * * *';
+const REMINDER_CRON = '0 8 * * *';
+const SCHEDULE_TZ = 'America/Sao_Paulo';
 
 const env = cleanEnv(process.env, {
   REDIS_HOST: host({ default: '127.0.0.1' }),
@@ -89,6 +96,19 @@ async function bootstrap() {
     logger,
   });
 
+  // Estende as previsoes das regras de recorrencia ate `hoje + N meses`.
+  const recurrenceProcessor = createRecurrenceProcessor({
+    store: createPrismaRecurrenceStore(prisma),
+    logger,
+  });
+
+  // Envia os lembretes proativos de vencimento (uma vez por espaco e por dia).
+  const reminderProcessor = createReminderProcessor({
+    store: createPrismaReminderStore(prisma),
+    notifier: createLogNotifier(logger),
+    logger,
+  });
+
   // Drena o outbox transacional gravado pela API na mesma transacao das
   // escritas de negocio. Ponto de extensao: aqui entrariam e-mails, webhooks,
   // notificacoes etc., todos disparados de forma confiavel (com retry).
@@ -134,12 +154,22 @@ async function bootstrap() {
     }
   });
 
-  makeWorker('obligations', async (_name, _data) => {
-    logger.info('Enviando lembretes de obrigacoes (placeholder)');
+  makeWorker('obligations', async (_name, data: { spaceId?: string }) => {
+    // Com `spaceId`, avalia so aquele espaco (pedido pontual); sem, varre todos.
+    if (data?.spaceId) {
+      await reminderProcessor.runSpace(data.spaceId);
+    } else {
+      await reminderProcessor.runAll();
+    }
   });
 
-  makeWorker('recurrence', async (_name, _data) => {
-    logger.info('Gerando receitas/despesas recorrentes (placeholder)');
+  makeWorker('recurrence', async (_name, data: { ruleId?: string; upToDate?: string }) => {
+    // Com `ruleId`, materializa so aquela regra; sem, cobre todas as ativas.
+    if (data?.ruleId) {
+      await recurrenceProcessor.generateRule(data.ruleId, data.upToDate);
+    } else {
+      await recurrenceProcessor.generateAll();
+    }
   });
 
   makeWorker('reports', async (_name, _data) => {
@@ -152,6 +182,24 @@ async function bootstrap() {
   await getQueue('outbox')
     .add('outbox:process', {}, { repeat: { every: OUTBOX_POLL_INTERVAL_MS }, removeOnComplete: true, removeOnFail: 100 })
     .catch((e: unknown) => logger.warn({ err: (e as Error)?.message }, 'Nao foi possivel agendar o ciclo do outbox'));
+
+  // Jobs diarios: estender as previsoes das recorrencias de madrugada e enviar os
+  // lembretes de vencimento pela manha. O `tz` fixa a hora no fuso do negocio.
+  await getQueue('recurrence')
+    .add(
+      'recurrence:generate',
+      {},
+      { repeat: { pattern: RECURRENCE_CRON, tz: SCHEDULE_TZ }, removeOnComplete: true, removeOnFail: 100 },
+    )
+    .catch((e: unknown) => logger.warn({ err: (e as Error)?.message }, 'Nao foi possivel agendar a geracao de recorrencias'));
+
+  await getQueue('obligations')
+    .add(
+      'obligations:reminder',
+      {},
+      { repeat: { pattern: REMINDER_CRON, tz: SCHEDULE_TZ }, removeOnComplete: true, removeOnFail: 100 },
+    )
+    .catch((e: unknown) => logger.warn({ err: (e as Error)?.message }, 'Nao foi possivel agendar os lembretes de vencimento'));
 
   const shutdown = async (sig: string) => {
     logger.info({ sig }, 'Encerrando worker...');
