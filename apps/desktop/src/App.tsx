@@ -9,6 +9,7 @@ import ObligationsPage from './pages/ObligationsPage';
 import CategoriesPage from './pages/CategoriesPage';
 import CategorizationRulesPage from './pages/CategorizationRulesPage';
 import ExchangeRatesPage from './pages/ExchangeRatesPage';
+import OpenFinancePage from './pages/OpenFinancePage';
 import ReportJobsPage from './pages/ReportJobsPage';
 import BudgetsPage from './pages/BudgetsPage';
 import GoalsPage from './pages/GoalsPage';
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/categories" element={<RequireAuth><CategoriesPage /></RequireAuth>} />
         <Route path="/categorization-rules" element={<RequireAuth><CategorizationRulesPage /></RequireAuth>} />
         <Route path="/exchange-rates" element={<RequireAuth><ExchangeRatesPage /></RequireAuth>} />
+        <Route path="/open-finance" element={<RequireAuth><OpenFinancePage /></RequireAuth>} />
         <Route path="/reports" element={<RequireAuth><ReportJobsPage /></RequireAuth>} />
         <Route path="/budgets" element={<RequireAuth><BudgetsPage /></RequireAuth>} />
         <Route path="/goals" element={<RequireAuth><GoalsPage /></RequireAuth>} />

@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { LayoutDashboard, ArrowLeftRight, CalendarClock, Wallet, Plus, User, CreditCard, Tags, PiggyBank, Target, Filter, Coins, FileText } from 'lucide-react-native';
+import { LayoutDashboard, ArrowLeftRight, CalendarClock, Wallet, Plus, User, CreditCard, Tags, PiggyBank, Target, Filter, Coins, FileText, Landmark } from 'lucide-react-native';
 import { Pressable, View, StyleSheet } from 'react-native';
 import OfflineBanner from '../../src/components/OfflineBanner';
 
@@ -70,6 +70,11 @@ export default function TabsLayout() {
         title: 'Cambio',
         tabBarButtonTestID: 'tab-cambio',
         tabBarIcon: ({ color }) => <Coins size={22} color={color} />,
+      }} />
+      <Tabs.Screen name="open-finance" options={{
+        title: 'Open Finance',
+        tabBarButtonTestID: 'tab-open-finance',
+        tabBarIcon: ({ color }) => <Landmark size={22} color={color} />,
       }} />
       <Tabs.Screen name="report-jobs" options={{
         title: 'Relatorios',

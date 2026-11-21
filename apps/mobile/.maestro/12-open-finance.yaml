@@ -1,0 +1,33 @@
+appId: host.exp.exponent
+---
+- openLink: "exp://10.0.2.2:8081"
+- runFlow: scripts/ensure-logged-in.yaml
+
+# Abre a aba de Open Finance
+- tapOn:
+    id: "tab-open-finance"
+- extendedWaitUntil:
+    visible: ".*Conecte instituicoes via Open Finance.*"
+    timeout: 20000
+- assertVisible: "Banco Exemplo"
+
+# Conecta o Banco Exemplo: o consentimento nasce pendente de autorizacao
+- tapOn:
+    id: "openfinance-conectar-banco-exemplo"
+- extendedWaitUntil:
+    visible: "Autorizacao pendente"
+    timeout: 20000
+
+# Verifica a autorizacao no provedor: vira Conectado
+- tapOn:
+    id: "openfinance-verificar-banco-exemplo"
+- extendedWaitUntil:
+    visible: "Conectado"
+    timeout: 20000
+
+# Revoga o consentimento
+- tapOn:
+    id: "openfinance-revogar-banco-exemplo"
+- extendedWaitUntil:
+    visible: "Revogado"
+    timeout: 20000

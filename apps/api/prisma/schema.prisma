@@ -124,6 +124,15 @@ enum ReportJobStatus {
   error
 }
 
+// Situacao do consentimento de Open Finance (Fase 5).
+enum OpenFinanceConsentStatus {
+  pending
+  authorized
+  rejected
+  expired
+  revoked
+}
+
 model User {
   id              String       @id @default(uuid())
   email           String       @unique
@@ -174,6 +183,7 @@ model FinancialSpace {
   categorizationRules CategorizationRule[]
   exchangeRates   ExchangeRate[]
   reportJobs      ReportJob[]
+  openFinanceConsents OpenFinanceConsent[]
 
   @@unique([id])
   @@map("financial_spaces")
@@ -663,4 +673,29 @@ model ReportJob {
 
   @@index([financialSpaceId, status, createdAt])
   @@map("report_jobs")
+}
+
+// Consentimento de Open Finance (Fase 5): vinculo entre um espaco financeiro e
+// uma instituicao, criado no agregador mediante consentimento explicito do
+// usuario. Guardamos o identificador externo e a situacao; a URL de autorizacao
+// e devolvida para o usuario concluir o fluxo hospedado pelo provedor.
+model OpenFinanceConsent {
+  id               String                     @id @default(uuid())
+  financialSpaceId String
+  institutionId    String
+  institutionName  String
+  status           OpenFinanceConsentStatus   @default(pending)
+  externalId       String?
+  consentUrl       String?
+  expiresAt        DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  version          Int                        @default(0)
+
+  financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+
+  @@unique([financialSpaceId, institutionId])
+  @@index([financialSpaceId, status])
+  @@map("open_finance_consents")
 }

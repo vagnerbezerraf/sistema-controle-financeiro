@@ -1228,3 +1228,49 @@ export interface CreateReportJobRequest {
 }
 
 export type { CurrencyCode, MoneyAmount, IsoDate, UuidSchema };
+
+/** Situacao de um consentimento de Open Finance (Fase 5). */
+export type OpenFinanceConsentStatus =
+  | 'pending'
+  | 'authorized'
+  | 'rejected'
+  | 'expired'
+  | 'revoked';
+
+/**
+ * Consentimento de Open Finance de um espaco com uma instituicao. O ciclo de
+ * vida e dirigido pelo agregador; `consentUrl` e a pagina hospedada onde o
+ * usuario autoriza o acesso.
+ */
+export interface OpenFinanceConsent {
+  id: string;
+  financialSpaceId: string;
+  institutionId: string;
+  institutionName: string;
+  status: OpenFinanceConsentStatus;
+  /** URL de autorizacao no provedor; `null` apos revogado. */
+  consentUrl: string | null;
+  /** Validade do consentimento (ISO-8601) ou `null` quando sem prazo. */
+  expiresAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+/** Instituicao do provedor de Open Finance, com o consentimento do espaco. */
+export interface OpenFinanceInstitution {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  /** Consentimento existente para a instituicao; `null` quando nao conectada. */
+  consent: OpenFinanceConsent | null;
+  /** true quando ha consentimento autorizado e dentro do prazo. */
+  connected: boolean;
+}
+
+export interface CreateOpenFinanceConsentRequest {
+  institutionId: string;
+  /** URL de retorno apos a autorizacao no provedor. */
+  redirectUrl?: string;
+}

@@ -25,6 +25,7 @@ import {
   Filter,
   Coins,
   Download,
+  Landmark,
 } from 'lucide-react';
 import { cls } from '@/lib/format';
 import OfflineBanner from '@/components/OfflineBanner';
@@ -54,6 +55,7 @@ const navItems: NavItem[] = [
   { href: '/app/scenarios', label: 'Cenarios', icon: FlaskConical },
   { href: '/app/imports', label: 'Importar extrato', icon: Upload },
   { href: '/app/reconciliation', label: 'Conciliacao', icon: GitMerge },
+  { href: '/app/open-finance', label: 'Open Finance', icon: Landmark, testId: 'nav-open-finance' },
   { href: '/app/members', label: 'Membros', icon: Users },
   { href: '/app/reports', label: 'Relatorios', icon: FileBarChart },
   { href: '/app/report-jobs', label: 'Exportacoes', icon: Download, testId: 'nav-report-jobs' },

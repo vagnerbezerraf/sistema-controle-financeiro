@@ -1,5 +1,5 @@
 import { useAuth } from '../auth/AuthContext';
-import { ArrowLeftRight, CalendarClock, Coins, CreditCard, FileText, Filter, LogOut, PiggyBank, Settings, Tags, Target, Wallet, LayoutDashboard } from 'lucide-react';
+import { ArrowLeftRight, CalendarClock, Coins, CreditCard, FileText, Filter, Landmark, LogOut, PiggyBank, Settings, Tags, Target, Wallet, LayoutDashboard } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import OfflineBanner from '../components/OfflineBanner';
 
@@ -24,6 +24,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <NavItem to="/categories" label="Categorias" icon={Tags} pathname={location.pathname} />
           <NavItem to="/categorization-rules" label="Regras de categorizacao" icon={Filter} pathname={location.pathname} />
           <NavItem to="/exchange-rates" label="Taxas de cambio" icon={Coins} pathname={location.pathname} />
+          <NavItem to="/open-finance" label="Open Finance" icon={Landmark} pathname={location.pathname} />
           <NavItem to="/reports" label="Relatorios assincronos" icon={FileText} pathname={location.pathname} />
           <NavItem to="/cards" label="Cartoes" icon={CreditCard} pathname={location.pathname} />
           <NavItem to="/obligations" label="Contas a pagar" icon={CalendarClock} pathname={location.pathname} />
@@ -81,6 +82,7 @@ function currentTitle(pathname: string) {
     case '/categories': return 'Categorias';
     case '/categorization-rules': return 'Regras de categorizacao';
     case '/exchange-rates': return 'Taxas de cambio';
+    case '/open-finance': return 'Open Finance';
     case '/reports': return 'Relatorios assincronos';
     case '/budgets': return 'Orcamentos';
     case '/goals': return 'Metas';
