@@ -156,18 +156,6 @@ export function createReminderProcessor(deps: ReminderProcessorDeps): ReminderPr
   };
 }
 
-/** Notifier que apenas registra o lembrete (nao ha transporte de e-mail no worker). */
-export function createLogNotifier(logger: ReminderLogger): ReminderNotifier {
-  return {
-    async send(message: ReminderMessage): Promise<void> {
-      logger.info(
-        { to: message.to, subject: message.subject, obligations: message.obligationIds.length },
-        'Lembrete de vencimento enviado',
-      );
-    },
-  };
-}
-
 /** Store dos lembretes sobre o Prisma (mesmas tabelas que a API grava). */
 export function createPrismaReminderStore(prisma: PrismaClient): ReminderStore {
   return {

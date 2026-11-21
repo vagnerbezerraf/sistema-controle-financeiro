@@ -63,7 +63,7 @@ Representar obrigações futuras sem distorcer o saldo realizado.
 - Contas a pagar e receber.
 - Calendário financeiro.
 - Alertas de vencimento.
-- Worker, outbox e fila: outbox transacional drenado pelo worker (retry/backoff/dead-letter) e jobs de **recorrências** (top-up do horizonte, reexecutável) e **lembretes de vencimento** (e-mail por membro com horário silencioso e idempotência diária); ver checklist §2.20 e §2.37.
+- Worker, outbox e fila: outbox transacional drenado pelo worker (retry/backoff/dead-letter) e jobs de **recorrências** (top-up do horizonte, reexecutável), **lembretes de vencimento** (e-mail real por **SMTP** ao membro, com horário silencioso e idempotência diária) e **manutenção do cache de relatórios** (`reports:cache`, evicção de jobs finalizados além da retenção); sem placeholders no worker; ver checklist §2.20, §2.37 e §2.38.
 
 ### Critério de saída
 

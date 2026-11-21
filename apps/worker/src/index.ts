@@ -1,13 +1,15 @@
 import 'dotenv/config';
-import { cleanEnv, host, num, str } from 'envalid';
+import { bool, cleanEnv, host, num, str } from 'envalid';
 import { Queue, Worker, QueueEvents } from 'bullmq';
 import IORedis from 'ioredis';
 import { PrismaClient } from '@prisma/client';
 import { pino } from 'pino';
 import { createOutboxDrainer, createPrismaOutboxStore, type OutboxEventRecord } from './outbox';
 import { createPrismaReportStore, createReportProcessor } from './reports';
+import { createPrismaReportCacheStore, createReportCacheProcessor } from './report-cache';
 import { createPrismaRecurrenceStore, createRecurrenceProcessor } from './recurrence';
-import { createLogNotifier, createPrismaReminderStore, createReminderProcessor } from './reminders';
+import { createPrismaReminderStore, createReminderProcessor } from './reminders';
+import { createMailNotifier, createMailSender } from './mail';
 
 const logger = pino({ name: 'scf-worker' });
 
@@ -16,6 +18,7 @@ const OUTBOX_POLL_INTERVAL_MS = 30_000;
 
 /** Agenda diaria (cron) dos jobs periodicos, no fuso do negocio. */
 const RECURRENCE_CRON = '0 3 * * *';
+const REPORTS_CACHE_CRON = '0 4 * * *';
 const REMINDER_CRON = '0 8 * * *';
 const SCHEDULE_TZ = 'America/Sao_Paulo';
 
@@ -25,6 +28,14 @@ const env = cleanEnv(process.env, {
   REDIS_PASSWORD: str({ default: '' }),
   NODE_ENV: str({ default: 'development', choices: ['development', 'production', 'test'] }),
   DATABASE_URL: str({ default: 'postgresql://scf:scf_dev_password@127.0.0.1:5432/scf?schema=public' }),
+  // Envio de e-mail (lembretes de vencimento). Em dev aponte para o MailHog.
+  MAIL_ENABLED: bool({ default: false }),
+  MAIL_HOST: str({ default: 'localhost' }),
+  MAIL_PORT: num({ default: 1025 }),
+  MAIL_SECURE: bool({ default: false }),
+  MAIL_USER: str({ default: '' }),
+  MAIL_PASSWORD: str({ default: '' }),
+  MAIL_FROM: str({ default: 'SCF <no-reply@scf.local>' }),
 });
 
 function makeRedis() {
@@ -46,7 +57,7 @@ type JobTypes = {
   'outbox:process': { cursorId?: string };
   'obligations:reminder': { spaceId?: string };
   'recurrence:generate': { ruleId?: string; upToDate?: string };
-  'reports:cache': { spaceId: string; period: string };
+  'reports:cache': { retentionDays?: number };
 };
 
 type JobName = keyof JobTypes;
@@ -102,10 +113,30 @@ async function bootstrap() {
     logger,
   });
 
+  // Evicta o cache dos relatorios (conteudo CSV guardado no proprio job).
+  const reportCacheProcessor = createReportCacheProcessor({
+    store: createPrismaReportCacheStore(prisma),
+    logger,
+  });
+
+  // Transporte de e-mail (SMTP/MailHog ou log em dev), usado nos lembretes.
+  const mailSender = createMailSender({
+    config: {
+      enabled: env.MAIL_ENABLED,
+      host: env.MAIL_HOST,
+      port: env.MAIL_PORT,
+      secure: env.MAIL_SECURE,
+      user: env.MAIL_USER || undefined,
+      password: env.MAIL_PASSWORD || undefined,
+      from: env.MAIL_FROM,
+    },
+    logger,
+  });
+
   // Envia os lembretes proativos de vencimento (uma vez por espaco e por dia).
   const reminderProcessor = createReminderProcessor({
     store: createPrismaReminderStore(prisma),
-    notifier: createLogNotifier(logger),
+    notifier: createMailNotifier(mailSender),
     logger,
   });
 
@@ -172,8 +203,8 @@ async function bootstrap() {
     }
   });
 
-  makeWorker('reports', async (_name, _data) => {
-    logger.info('Cacheando relatorios (placeholder)');
+  makeWorker('reports', async (_name, data: { retentionDays?: number }) => {
+    await reportCacheProcessor.prune(data?.retentionDays);
   });
 
   // Agenda o ciclo do outbox como job repetivel (um por intervalo). O `add`
@@ -183,8 +214,9 @@ async function bootstrap() {
     .add('outbox:process', {}, { repeat: { every: OUTBOX_POLL_INTERVAL_MS }, removeOnComplete: true, removeOnFail: 100 })
     .catch((e: unknown) => logger.warn({ err: (e as Error)?.message }, 'Nao foi possivel agendar o ciclo do outbox'));
 
-  // Jobs diarios: estender as previsoes das recorrencias de madrugada e enviar os
-  // lembretes de vencimento pela manha. O `tz` fixa a hora no fuso do negocio.
+  // Jobs diarios: estender as previsoes das recorrencias de madrugada, evictar o
+  // cache de relatorios e enviar os lembretes de vencimento pela manha. O `tz`
+  // fixa a hora no fuso do negocio.
   await getQueue('recurrence')
     .add(
       'recurrence:generate',
@@ -192,6 +224,14 @@ async function bootstrap() {
       { repeat: { pattern: RECURRENCE_CRON, tz: SCHEDULE_TZ }, removeOnComplete: true, removeOnFail: 100 },
     )
     .catch((e: unknown) => logger.warn({ err: (e as Error)?.message }, 'Nao foi possivel agendar a geracao de recorrencias'));
+
+  await getQueue('reports')
+    .add(
+      'reports:cache',
+      {},
+      { repeat: { pattern: REPORTS_CACHE_CRON, tz: SCHEDULE_TZ }, removeOnComplete: true, removeOnFail: 100 },
+    )
+    .catch((e: unknown) => logger.warn({ err: (e as Error)?.message }, 'Nao foi possivel agendar a limpeza do cache de relatorios'));
 
   await getQueue('obligations')
     .add(
