@@ -121,7 +121,7 @@ Adicionar automação externa somente depois de o núcleo estar estável.
 - ✅ **Regras avançadas de categorização** — entregue (1ª fatia da Fase 5): CRUD com precedência, casamento pela descrição, aplicação retroativa e categorização no commit da importação; ver checklist §2.34.
 - ✅ **Relatórios assíncronos** — entregue (3ª fatia da Fase 5): pedido de exportação de lançamentos enfileirado via **outbox transacional** e processado em background pelo worker (`pending`/`running`/`done`/`error`), com **cache do CSV** no resultado do job e consulta/download pela UI, com paridade Web/Desktop/Mobile; ver checklist §2.36.
 - ✅ **Múltiplas moedas** — entregue (2ª fatia da Fase 5): taxas de câmbio por par com vigência por data, conversão dos totais consolidados (dashboard e patrimônio líquido) para a moeda de reporte do espaço, taxa inversa/identidade, contagem de lançamentos sem taxa e bloqueio de transferência entre moedas diferentes, com paridade Web/Desktop/Mobile; ver checklist §2.35.
-- Modo offline completo.
+- ✅ **Modo offline (núcleo compartilhado + Desktop/Mobile)** — entregue (4ª fatia da Fase 5): pacote puro `@scf/offline` com **fila de escritas** (FIFO, backoff exponencial, idempotência) e **cache de leitura**; no Desktop (localStorage) e no Mobile (SecureStore) o `apiFetch` passa a cachear as leituras e a enfileirar as escritas quando a rede cai, com faixa de status e sincronização automática ao reconectar; ver checklist §2.39. Cobertura no Web e reconciliação de conflitos ainda pendentes.
 - Distribuição oficial do desktop para sistemas operacionais ainda não cobertos.
 - Separação física de módulos que apresentem gargalo comprovado.
 

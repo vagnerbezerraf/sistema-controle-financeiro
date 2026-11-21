@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { LayoutDashboard, ArrowLeftRight, CalendarClock, Wallet, Plus, User, CreditCard, Tags, PiggyBank, Target, Filter, Coins, FileText } from 'lucide-react-native';
 import { Pressable, View, StyleSheet } from 'react-native';
+import OfflineBanner from '../../src/components/OfflineBanner';
 
 function NewButton({ onPress }: { onPress: () => void }) {
   return (
@@ -14,6 +15,7 @@ function NewButton({ onPress }: { onPress: () => void }) {
 
 export default function TabsLayout() {
   return (
+    <>
     <Tabs
       screenOptions={{
         headerShown: true,
@@ -85,6 +87,8 @@ export default function TabsLayout() {
         tabBarIcon: ({ color }) => <User size={22} color={color} />,
       }} />
     </Tabs>
+    <OfflineBanner />
+    </>
   );
 }
 

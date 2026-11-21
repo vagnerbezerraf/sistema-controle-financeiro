@@ -1,6 +1,7 @@
 import { useAuth } from '../auth/AuthContext';
 import { ArrowLeftRight, CalendarClock, Coins, CreditCard, FileText, Filter, LogOut, PiggyBank, Settings, Tags, Target, Wallet, LayoutDashboard } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import OfflineBanner from '../components/OfflineBanner';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -43,7 +44,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       <main className="flex flex-1 flex-col min-w-0">
         <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-neutral-200 bg-white px-6">
-          <div className="text-sm font-medium text-neutral-800">{currentTitle(location.pathname)}</div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-neutral-800">{currentTitle(location.pathname)}</span>
+            <OfflineBanner />
+          </div>
           <div className="flex items-center gap-2 text-sm">
             <button className="btn-primary" onClick={() => alert('Formulario de novo lancamento (MVP)')}>Novo lancamento</button>
             <button className="btn-outline" onClick={() => alert('Atalhos: Ctrl+N novo, Ctrl+F pesquisa, Ctrl+I importar')}>Atalhos</button>
