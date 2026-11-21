@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { LayoutDashboard, ArrowLeftRight, CalendarClock, Wallet, Plus, User, CreditCard, Tags, PiggyBank, Target, Filter, Coins } from 'lucide-react-native';
+import { LayoutDashboard, ArrowLeftRight, CalendarClock, Wallet, Plus, User, CreditCard, Tags, PiggyBank, Target, Filter, Coins, FileText } from 'lucide-react-native';
 import { Pressable, View, StyleSheet } from 'react-native';
 
 function NewButton({ onPress }: { onPress: () => void }) {
@@ -68,6 +68,11 @@ export default function TabsLayout() {
         title: 'Cambio',
         tabBarButtonTestID: 'tab-cambio',
         tabBarIcon: ({ color }) => <Coins size={22} color={color} />,
+      }} />
+      <Tabs.Screen name="report-jobs" options={{
+        title: 'Relatorios',
+        tabBarButtonTestID: 'tab-relatorios',
+        tabBarIcon: ({ color }) => <FileText size={22} color={color} />,
       }} />
       <Tabs.Screen name="goals" options={{
         title: 'Metas',

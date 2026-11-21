@@ -16,7 +16,7 @@ test.describe('Web · conciliacao', () => {
     await loginViaUi(page, seeded.email, seeded.password);
     await page.goto('/app/reconciliation');
 
-    await expect(page.getByRole('heading', { name: 'Conciliacao' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Conciliacao', exact: true })).toBeVisible();
     await expect(page.getByTestId('conciliacao-resumo-alta')).toContainText('1');
     await expect(page.getByTestId('conciliacao-sugestao-0')).toContainText('Conta de luz');
     await expect(page.getByTestId('conciliacao-sugestao-0')).toContainText('Alta');

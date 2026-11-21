@@ -29,6 +29,7 @@ import { ReconciliationModule } from './reconciliation/reconciliation.module';
 import { MembersModule } from './members/members.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AttachmentsModule } from './attachments/attachments.module';
+import { ReportsModule } from './reports/reports.module';
 import { OutboxModule } from './outbox/outbox.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
@@ -105,6 +106,7 @@ import { TelemetryService } from './telemetry/telemetry.service';
     MembersModule,
     NotificationsModule,
     AttachmentsModule,
+    ReportsModule,
     OutboxModule,
   ],
   providers: [

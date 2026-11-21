@@ -353,9 +353,8 @@ describe('E2E | Transações: criação, consistência de movimentos, idempotên
     const abril = await api(app)
       .get(`/api/v1/financial-spaces/${user.spaceId}/transactions/summary/dashboard?month=2026-04`)
       .set(auth(user.accessToken));
-    // Sem lançamentos os acumuladores permanecem no valor inicial "0" (só
-    // recebem `toFixed(2)` ao somar), então não há casas decimais.
-    expect(abril.body.totalIncome).toBe('0');
+    // Sem lançamentos os totais saem formatados em centavos (`toFixed(2)`).
+    expect(abril.body.totalIncome).toBe('0.00');
   });
 
   it('isola as transações entre espaços financeiros (403)', async () => {

@@ -9,6 +9,7 @@ import ObligationsPage from './pages/ObligationsPage';
 import CategoriesPage from './pages/CategoriesPage';
 import CategorizationRulesPage from './pages/CategorizationRulesPage';
 import ExchangeRatesPage from './pages/ExchangeRatesPage';
+import ReportJobsPage from './pages/ReportJobsPage';
 import BudgetsPage from './pages/BudgetsPage';
 import GoalsPage from './pages/GoalsPage';
 import AppShell from './shell/AppShell';
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="/categories" element={<RequireAuth><CategoriesPage /></RequireAuth>} />
         <Route path="/categorization-rules" element={<RequireAuth><CategorizationRulesPage /></RequireAuth>} />
         <Route path="/exchange-rates" element={<RequireAuth><ExchangeRatesPage /></RequireAuth>} />
+        <Route path="/reports" element={<RequireAuth><ReportJobsPage /></RequireAuth>} />
         <Route path="/budgets" element={<RequireAuth><BudgetsPage /></RequireAuth>} />
         <Route path="/goals" element={<RequireAuth><GoalsPage /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -1180,4 +1180,51 @@ export interface AuthResponse {
   };
 }
 
+/** Tipo de relatorio gerado de forma assincrona (Fase 5). */
+export type ReportJobType = 'transactions_export';
+
+/**
+ * Situacao de um relatorio assincrono ao longo do seu ciclo de vida:
+ * `pending` (enfileirado), `running` (em processamento), `done` (resultado
+ * disponivel para download) e `error` (falhou; `error` traz o motivo).
+ */
+export type ReportJobStatus = 'pending' | 'running' | 'done' | 'error';
+
+/** Filtros aceitos pela exportacao assincrona de lancamentos. */
+export interface ReportJobParams {
+  /** Inicio do periodo (YYYY-MM-DD), inclusive. */
+  from?: string;
+  /** Fim do periodo (YYYY-MM-DD), inclusive. */
+  to?: string;
+}
+
+/**
+ * Relatorio assincrono: o pedido e gravado na hora e processado em background
+ * pelo worker; o resultado fica em cache no proprio job ate ser baixado.
+ */
+export interface ReportJob {
+  id: string;
+  financialSpaceId: string;
+  type: ReportJobType;
+  status: ReportJobStatus;
+  params: ReportJobParams;
+  /** Quantidade de linhas geradas; `null` enquanto o job nao termina. */
+  rowCount: number | null;
+  /** Motivo da falha quando `status = 'error'`. */
+  error: string | null;
+  requestedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface CreateReportJobRequest {
+  type: ReportJobType;
+  /** Inicio do periodo (YYYY-MM-DD). Padrao: 30 dias antes de hoje. */
+  from?: string;
+  /** Fim do periodo (YYYY-MM-DD). Padrao: hoje. */
+  to?: string;
+}
+
 export type { CurrencyCode, MoneyAmount, IsoDate, UuidSchema };

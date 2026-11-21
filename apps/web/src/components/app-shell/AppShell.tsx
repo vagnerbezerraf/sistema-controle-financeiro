@@ -24,6 +24,7 @@ import {
   ChevronsUpDown,
   Filter,
   Coins,
+  Download,
 } from 'lucide-react';
 import { cls } from '@/lib/format';
 
@@ -32,6 +33,7 @@ interface NavItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   external?: boolean;
+  testId?: string;
 }
 
 const navItems: NavItem[] = [
@@ -53,6 +55,7 @@ const navItems: NavItem[] = [
   { href: '/app/reconciliation', label: 'Conciliacao', icon: GitMerge },
   { href: '/app/members', label: 'Membros', icon: Users },
   { href: '/app/reports', label: 'Relatorios', icon: FileBarChart },
+  { href: '/app/report-jobs', label: 'Exportacoes', icon: Download, testId: 'nav-report-jobs' },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -92,6 +95,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={n.href}
                 href={n.href}
+                data-testid={n.testId}
                 className={cls(
                   'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition duration-fast',
                   active ? 'bg-brand-50 text-brand-700' : 'text-neutral-700 hover:bg-neutral-100',

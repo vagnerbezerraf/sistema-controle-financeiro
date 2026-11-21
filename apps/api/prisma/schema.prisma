@@ -111,6 +111,19 @@ enum RuleMatchType {
   startsWith
 }
 
+// Relatorios gerados de forma assincrona (Fase 5). O pedido e gravado na hora e
+// processado em background pelo worker; o resultado fica em cache no proprio job.
+enum ReportJobType {
+  transactions_export
+}
+
+enum ReportJobStatus {
+  pending
+  running
+  done
+  error
+}
+
 model User {
   id              String       @id @default(uuid())
   email           String       @unique
@@ -160,6 +173,7 @@ model FinancialSpace {
   attachments     Attachment[]
   categorizationRules CategorizationRule[]
   exchangeRates   ExchangeRate[]
+  reportJobs      ReportJob[]
 
   @@unique([id])
   @@map("financial_spaces")
@@ -624,4 +638,29 @@ model CategorizationRule {
   @@index([financialSpaceId, state, priority])
   @@index([financialSpaceId, categoryId])
   @@map("categorization_rules")
+}
+
+// Relatorio assincrono (Fase 5). A API grava o pedido com status "pending" e um
+// evento no outbox na MESMA transacao; o worker consome o evento, gera o
+// conteudo e o guarda em "result" (JSON, em cache), passando o status para
+// "done" (ou "error" com o motivo). "params" guarda os filtros do pedido.
+model ReportJob {
+  id               String          @id @default(uuid())
+  financialSpaceId String
+  type             ReportJobType
+  status           ReportJobStatus @default(pending)
+  params           Json
+  result           Json?
+  rowCount         Int?
+  error            String?
+  requestedBy      String?
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  financialSpace FinancialSpace @relation(fields: [financialSpaceId], references: [id], onDelete: Cascade)
+
+  @@index([financialSpaceId, status, createdAt])
+  @@map("report_jobs")
 }

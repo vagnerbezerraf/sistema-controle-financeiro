@@ -142,6 +142,7 @@ describe('E2E | Relatorios avancados', () => {
       assets: '0.00',
       liabilities: '0.00',
       netWorth: '0.00',
+      currency: 'BRL',
       accounts: [],
     });
     expect(res.body.savings).toEqual({

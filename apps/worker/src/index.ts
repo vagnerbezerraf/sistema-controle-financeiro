@@ -5,6 +5,7 @@ import IORedis from 'ioredis';
 import { PrismaClient } from '@prisma/client';
 import { pino } from 'pino';
 import { createOutboxDrainer, createPrismaOutboxStore, type OutboxEventRecord } from './outbox';
+import { createPrismaReportStore, createReportProcessor } from './reports';
 
 const logger = pino({ name: 'scf-worker' });
 
@@ -82,16 +83,26 @@ async function bootstrap() {
   const workers: Worker[] = [];
   const qevs: QueueEvents[] = [];
 
+  // Gera os relatorios pedidos pela API (evento `report.requested` do outbox).
+  const reportProcessor = createReportProcessor({
+    store: createPrismaReportStore(prisma),
+    logger,
+  });
+
   // Drena o outbox transacional gravado pela API na mesma transacao das
   // escritas de negocio. Ponto de extensao: aqui entrariam e-mails, webhooks,
   // notificacoes etc., todos disparados de forma confiavel (com retry).
   const outboxDrainer = createOutboxDrainer({
     store: createPrismaOutboxStore(prisma),
-    dispatch: (event: OutboxEventRecord) => {
+    dispatch: async (event: OutboxEventRecord) => {
       logger.info(
         { id: event.id, eventType: event.eventType, financialSpaceId: event.financialSpaceId },
         'Publicando evento do outbox',
       );
+      if (event.eventType === 'report.requested') {
+        const payload = (event.payload ?? {}) as { jobId?: string };
+        await reportProcessor.process({ jobId: payload.jobId });
+      }
     },
     logger,
   });

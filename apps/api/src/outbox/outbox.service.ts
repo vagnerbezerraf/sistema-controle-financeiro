@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 /** Eventos de dominio registrados no outbox transacional. */
-export type OutboxEventType = 'recurrence.generated' | 'obligation.reconciled' | 'invoice.paid';
+export type OutboxEventType =
+  | 'recurrence.generated'
+  | 'obligation.reconciled'
+  | 'invoice.paid'
+  | 'report.requested';
 
 /**
  * Grava o evento na **mesma transacao** da escrita de negocio.
