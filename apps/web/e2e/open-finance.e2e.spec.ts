@@ -34,4 +34,21 @@ test.describe('Web · Open Finance', () => {
     await expect(page).toHaveURL(/\/app\/open-finance/);
     await expect(page.getByRole('heading', { name: 'Open Finance' })).toBeVisible();
   });
+
+  test('sincroniza os lancamentos de um consentimento autorizado', async ({ page }) => {
+    const user = await seedUser();
+    await loginViaUi(page, user.email, user.password);
+    await page.goto('/app/open-finance');
+
+    await page.getByTestId('openfinance-conectar-banco-exemplo').click();
+    await page.getByTestId('openfinance-verificar-banco-exemplo').click();
+    await expect(page.getByTestId('openfinance-status-banco-exemplo')).toContainText('Conectado');
+
+    await page.getByTestId('openfinance-conta-banco-exemplo').selectOption({ label: 'Conta E2E' });
+    await page.getByTestId('openfinance-sincronizar-banco-exemplo').click();
+
+    await expect(page.getByTestId('openfinance-sincronizado-banco-exemplo')).toContainText(
+      '5 lancamento(s) importado(s)',
+    );
+  });
 });

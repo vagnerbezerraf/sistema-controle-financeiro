@@ -1,24 +1,45 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, PrismaClient, type OpenFinanceConsent as ConsentRow } from '@prisma/client';
-import type { OpenFinanceConsent, OpenFinanceInstitution } from '@scf/api-contracts';
+import type {
+  OpenFinanceConsent,
+  OpenFinanceInstitution,
+  OpenFinanceSyncResult,
+} from '@scf/api-contracts';
 import {
   canRevoke,
   effectiveStatus,
+  isConsentActive,
   isTerminalStatus,
   normalizeStatus,
   type ConsentStatus,
 } from './domain/open-finance';
+import {
+  directionForAmount,
+  mergeSyncedIds,
+  postingDirectionFor,
+  selectNewTransactions,
+  signlessAmount,
+  type ProviderTransaction,
+} from './domain/sync';
+import { toDate } from '../common/utils/date';
 import { OPEN_FINANCE_PROVIDER } from './open-finance.provider';
 import type { OpenFinanceProvider } from './domain/open-finance';
-import type { CreateOpenFinanceConsentRequest } from './http/dto';
+import type {
+  CreateOpenFinanceConsentRequest,
+  SyncOpenFinanceConsentRequest,
+} from './http/dto';
 
 /** Retorno padrao quando o cliente (app nativo/desktop) nao informa a URL. */
 const DEFAULT_REDIRECT_URL = 'scf://open-finance/callback';
+
+/** Teto de paginas lidas por sincronizacao, para nao prender a requisicao. */
+const MAX_PAGES_PER_SYNC = 10;
 
 /** Converte a linha do banco para a visao publica, com o status efetivo. */
 function toView(row: ConsentRow, now: Date): OpenFinanceConsent {
@@ -32,6 +53,9 @@ function toView(row: ConsentRow, now: Date): OpenFinanceConsent {
     consentUrl: row.consentUrl,
     expiresAt,
     revokedAt: row.revokedAt ? row.revokedAt.toISOString() : null,
+    targetAccountId: row.targetAccountId,
+    lastSyncedAt: row.lastSyncedAt ? row.lastSyncedAt.toISOString() : null,
+    syncedCount: row.syncedExternalIds.length,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     version: row.version,
@@ -186,6 +210,138 @@ export class OpenFinanceService {
       institutionId: row.institutionId,
     });
     return toView(row, new Date());
+  }
+
+  /**
+   * Sincronizacao incremental: le os lancamentos do agregador em paginas,
+   * importa os que ainda nao foram vistos (deduplicando por identificador
+   * externo) e grava o cursor e os ids no consentimento, de modo que a proxima
+   * chamada continue de onde parou. A rede fica fora da transacao.
+   */
+  async syncConsent(
+    spaceId: string,
+    consentId: string,
+    body: SyncOpenFinanceConsentRequest,
+    userId: string,
+  ): Promise<OpenFinanceSyncResult> {
+    const existing = await this.loadRow(spaceId, consentId);
+    const now = new Date();
+    const expiresAt = existing.expiresAt ? existing.expiresAt.toISOString() : null;
+    if (!isConsentActive(existing.status as ConsentStatus, expiresAt, now) || !existing.externalId) {
+      throw new ConflictException({
+        code: 'CONSENT_NOT_ACTIVE',
+        message: 'Somente consentimentos autorizados podem sincronizar lancamentos',
+      });
+    }
+
+    // Conta de destino: a informada agora ou a ultima usada neste consentimento.
+    const accountId = body.accountId ?? existing.targetAccountId;
+    if (!accountId) {
+      throw new BadRequestException({
+        code: 'MISSING_TARGET_ACCOUNT',
+        message: 'Informe a conta de destino dos lancamentos',
+      });
+    }
+    const account = await this.prisma.account.findFirst({
+      where: { id: accountId, financialSpaceId: spaceId },
+      select: { id: true, currency: true },
+    });
+    if (!account) {
+      throw new BadRequestException({
+        code: 'INVALID_ACCOUNT',
+        message: 'Conta nao pertence a este espaco financeiro',
+      });
+    }
+
+    // Le as paginas primeiro (rede fora da transacao) acumulando apenas o novo.
+    const toImport: ProviderTransaction[] = [];
+    let cursor = existing.syncCursor;
+    let syncedIds = [...existing.syncedExternalIds];
+    let skippedCount = 0;
+    let hasMore = false;
+
+    for (let page = 0; page < MAX_PAGES_PER_SYNC; page += 1) {
+      const result = await this.provider.fetchTransactions({
+        externalId: existing.externalId,
+        cursor,
+      });
+      const fresh = selectNewTransactions(syncedIds, result.transactions);
+      skippedCount += result.transactions.length - fresh.length;
+      toImport.push(...fresh);
+      syncedIds = mergeSyncedIds(syncedIds, fresh.map((item) => item.externalId));
+      cursor = result.nextCursor;
+      hasMore = result.hasMore;
+      if (!result.hasMore || !result.nextCursor) break;
+    }
+
+    const { row, createdIds } = await this.prisma.$transaction(async (tx) => {
+      const ids: string[] = [];
+      for (const item of toImport) {
+        const type = directionForAmount(item.amount);
+        const amount = signlessAmount(item.amount);
+        const date = toDate(item.postedAt);
+        const created = await tx.transaction.create({
+          data: {
+            financialSpaceId: spaceId,
+            type,
+            status: 'confirmed',
+            description: item.description,
+            currency: account.currency,
+            totalAmount: amount,
+            effectiveDate: date,
+            postings: {
+              create: [
+                {
+                  accountId: account.id,
+                  amount,
+                  direction: postingDirectionFor(type),
+                  effectiveDate: date,
+                },
+              ],
+            },
+          },
+          select: { id: true },
+        });
+        ids.push(created.id);
+      }
+
+      const consent = await tx.openFinanceConsent.update({
+        where: { id: existing.id },
+        data: {
+          targetAccountId: account.id,
+          syncCursor: cursor,
+          lastSyncedAt: new Date(),
+          syncedExternalIds: syncedIds,
+          version: { increment: 1 },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          financialSpaceId: spaceId,
+          userId,
+          operation: 'openFinanceConsent.sync',
+          entityType: 'OpenFinanceConsent',
+          entityId: consent.id,
+          safeSummary: {
+            institutionId: consent.institutionId,
+            accountId: account.id,
+            importedCount: ids.length,
+            skippedCount,
+            hasMore,
+          },
+        },
+      });
+
+      return { row: consent, createdIds: ids };
+    });
+
+    return {
+      consent: toView(row, new Date()),
+      importedCount: createdIds.length,
+      skippedCount,
+      hasMore,
+    };
   }
 
   private async loadRow(spaceId: string, consentId: string): Promise<ConsentRow> {

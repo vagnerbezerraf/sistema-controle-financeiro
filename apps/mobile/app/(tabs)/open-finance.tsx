@@ -4,12 +4,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/auth/AuthContext';
 import { apiFetch } from '../../src/lib/api';
 import type {
+  Account,
   CreateOpenFinanceConsentRequest,
   OpenFinanceConsent,
   OpenFinanceConsentStatus,
   OpenFinanceInstitution,
+  OpenFinanceSyncResult,
 } from '@scf/api-contracts';
-import { Link2, RefreshCw, ShieldCheck, Unplug } from 'lucide-react-native';
+import { Download, Link2, RefreshCw, ShieldCheck, Unplug } from 'lucide-react-native';
 
 /** Rotulos e cores por situacao do consentimento. */
 const STATUS_LABELS: Record<OpenFinanceConsentStatus, string> = {
@@ -40,6 +42,7 @@ export default function OpenFinanceScreen() {
   const { currentSpaceId } = useAuth();
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const institutionsQ = useQuery({
@@ -49,14 +52,26 @@ export default function OpenFinanceScreen() {
       apiFetch<OpenFinanceInstitution[]>(`/financial-spaces/${currentSpaceId}/open-finance/institutions`),
   });
 
+  const accountsQ = useQuery({
+    queryKey: ['accounts', currentSpaceId],
+    enabled: !!currentSpaceId,
+    queryFn: () => apiFetch<Account[]>(`/financial-spaces/${currentSpaceId}/accounts`),
+  });
+
   const institutions = institutionsQ.data ?? [];
+  const accounts = accountsQ.data ?? [];
 
   async function refresh() {
-    await qc.invalidateQueries({ queryKey: ['open-finance.institutions', currentSpaceId] });
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['open-finance.institutions', currentSpaceId] }),
+      qc.invalidateQueries({ queryKey: ['transactions', currentSpaceId] }),
+      qc.invalidateQueries({ queryKey: ['accounts', currentSpaceId] }),
+    ]);
   }
 
   async function run(institution: OpenFinanceInstitution, action: () => Promise<unknown>) {
     setError(null);
+    setNotice(null);
     setBusyId(institution.id);
     try {
       await action();
@@ -99,6 +114,21 @@ export default function OpenFinanceScreen() {
     );
   }
 
+  function sync(institution: OpenFinanceInstitution, accountId: string) {
+    if (!currentSpaceId || !institution.consent) return;
+    return run(institution, async () => {
+      const result = await apiFetch<OpenFinanceSyncResult>(
+        `/financial-spaces/${currentSpaceId}/open-finance/consents/${institution.consent!.id}/sync`,
+        { method: 'POST', json: { accountId } },
+      );
+      setNotice(
+        result.importedCount > 0
+          ? `${result.importedCount} lancamento(s) importado(s) de ${institution.name}.`
+          : `Nenhum lancamento novo em ${institution.name}.`,
+      );
+    });
+  }
+
   return (
     <ScrollView
       className="flex-1 bg-neutral-50"
@@ -124,6 +154,15 @@ export default function OpenFinanceScreen() {
         </View>
       )}
 
+      {notice && (
+        <View
+          testID="openfinance-aviso"
+          className="mt-3 rounded-lg border border-success-200 bg-success-50 px-3 py-2"
+        >
+          <Text className="text-sm text-success-700">{notice}</Text>
+        </View>
+      )}
+
       <View className="mt-4 rounded-xl border border-neutral-200 bg-white shadow-sm">
         <View className="border-b border-neutral-100 p-4">
           <Text className="text-base font-semibold text-neutral-900">Instituicoes</Text>
@@ -145,10 +184,12 @@ export default function OpenFinanceScreen() {
             <InstitutionRow
               key={institution.id}
               institution={institution}
+              accounts={accounts}
               busy={busyId === institution.id}
               onConnect={() => connect(institution)}
               onCheck={() => check(institution)}
               onRevoke={() => revoke(institution)}
+              onSync={(accountId) => sync(institution, accountId)}
             />
           ))}
         </View>
@@ -159,19 +200,24 @@ export default function OpenFinanceScreen() {
 
 function InstitutionRow({
   institution,
+  accounts,
   busy,
   onConnect,
   onCheck,
   onRevoke,
+  onSync,
 }: {
   institution: OpenFinanceInstitution;
+  accounts: Account[];
   busy: boolean;
   onConnect: () => void;
   onCheck: () => void;
   onRevoke: () => void;
+  onSync: (accountId: string) => void;
 }) {
   const consent: OpenFinanceConsent | null = institution.consent;
   const status = consent?.status ?? null;
+  const [accountId, setAccountId] = useState(consent?.targetAccountId ?? '');
 
   return (
     <View testID={`openfinance-instituicao-${institution.id}`} className="border-b border-neutral-100 py-4">
@@ -190,6 +236,16 @@ function InstitutionRow({
             ? 'Aguardando autorizacao no provedor'
             : 'Sem conexao'}
       </Text>
+      {status === 'authorized' && (
+        <Text
+          testID={`openfinance-sincronizado-${institution.id}`}
+          className="mt-1 text-xs text-neutral-500"
+        >
+          {consent?.syncedCount
+            ? `${consent.syncedCount} lancamento(s) importado(s)`
+            : 'Nenhum lancamento importado'}
+        </Text>
+      )}
 
       <View className="mt-3 flex-row flex-wrap items-center gap-2">
         {!consent && (
@@ -228,6 +284,37 @@ function InstitutionRow({
         )}
         {status === 'authorized' && (
           <>
+            <Text className="mt-3 w-full text-xs font-medium text-neutral-700">Conta de destino</Text>
+            <View className="w-full gap-1">
+              {accounts.length === 0 && (
+                <Text className="text-xs text-neutral-500">Nenhuma conta disponivel.</Text>
+              )}
+              {accounts.map((account) => (
+                <Pressable
+                  key={account.id}
+                  testID={`openfinance-conta-${institution.id}-${account.name}`}
+                  onPress={() => setAccountId(account.id)}
+                  className={`rounded-lg border px-3 py-2 ${
+                    accountId === account.id ? 'border-brand-500 bg-brand-50' : 'border-neutral-200 bg-white'
+                  }`}
+                >
+                  <Text className="text-sm text-neutral-900">{account.name}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable
+              testID={`openfinance-sincronizar-${institution.id}`}
+              disabled={busy || !accountId}
+              onPress={() => onSync(accountId)}
+              className={`mt-2 flex-row items-center gap-1 rounded-lg bg-brand-600 px-3 py-1 ${
+                busy || !accountId ? 'opacity-50' : ''
+              }`}
+            >
+              <Download size={14} color="white" />
+              <Text className="text-xs font-medium text-white">
+                {busy ? 'Sincronizando...' : 'Sincronizar'}
+              </Text>
+            </Pressable>
             <Pressable
               testID={`openfinance-reconsultar-${institution.id}`}
               disabled={busy}

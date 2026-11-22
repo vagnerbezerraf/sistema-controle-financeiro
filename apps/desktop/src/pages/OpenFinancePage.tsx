@@ -3,12 +3,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { apiFetch } from '../lib/api';
 import type {
+  Account,
   CreateOpenFinanceConsentRequest,
   OpenFinanceConsent,
   OpenFinanceConsentStatus,
   OpenFinanceInstitution,
+  OpenFinanceSyncResult,
 } from '@scf/api-contracts';
-import { Link2, RefreshCw, ShieldCheck, Unplug } from 'lucide-react';
+import { Download, Link2, RefreshCw, ShieldCheck, Unplug } from 'lucide-react';
 
 /** Rotulos e cores por situacao do consentimento. */
 const STATUS_LABELS: Record<OpenFinanceConsentStatus, string> = {
@@ -31,6 +33,7 @@ export default function OpenFinancePage() {
   const { currentSpaceId } = useAuth();
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const institutionsQ = useQuery({
@@ -40,14 +43,26 @@ export default function OpenFinancePage() {
       apiFetch<OpenFinanceInstitution[]>(`/financial-spaces/${currentSpaceId}/open-finance/institutions`),
   });
 
+  const accountsQ = useQuery({
+    queryKey: ['accounts', currentSpaceId],
+    enabled: !!currentSpaceId,
+    queryFn: () => apiFetch<Account[]>(`/financial-spaces/${currentSpaceId}/accounts`),
+  });
+
   const institutions = institutionsQ.data ?? [];
+  const accounts = accountsQ.data ?? [];
 
   async function refresh() {
-    await qc.invalidateQueries({ queryKey: ['open-finance.institutions', currentSpaceId] });
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['open-finance.institutions', currentSpaceId] }),
+      qc.invalidateQueries({ queryKey: ['transactions', currentSpaceId] }),
+      qc.invalidateQueries({ queryKey: ['accounts', currentSpaceId] }),
+    ]);
   }
 
   async function run(institution: OpenFinanceInstitution, action: () => Promise<unknown>) {
     setError(null);
+    setNotice(null);
     setBusyId(institution.id);
     try {
       await action();
@@ -90,6 +105,21 @@ export default function OpenFinancePage() {
     );
   }
 
+  function sync(institution: OpenFinanceInstitution, accountId: string) {
+    if (!currentSpaceId || !institution.consent) return;
+    return run(institution, async () => {
+      const result = await apiFetch<OpenFinanceSyncResult>(
+        `/financial-spaces/${currentSpaceId}/open-finance/consents/${institution.consent!.id}/sync`,
+        { method: 'POST', json: { accountId } },
+      );
+      setNotice(
+        result.importedCount > 0
+          ? `${result.importedCount} lancamento(s) importado(s) de ${institution.name}.`
+          : `Nenhum lancamento novo em ${institution.name}.`,
+      );
+    });
+  }
+
   return (
     <div className="space-y-6">
       <header>
@@ -103,6 +133,15 @@ export default function OpenFinancePage() {
       {error && (
         <div className="rounded-md border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700">
           {error}
+        </div>
+      )}
+
+      {notice && (
+        <div
+          id="openfinance-aviso"
+          className="rounded-md border border-success-200 bg-success-50 px-3 py-2 text-sm text-success-700"
+        >
+          {notice}
         </div>
       )}
 
@@ -125,10 +164,12 @@ export default function OpenFinancePage() {
               <InstitutionRow
                 key={institution.id}
                 institution={institution}
+                accounts={accounts}
                 busy={busyId === institution.id}
                 onConnect={() => connect(institution)}
                 onCheck={() => check(institution)}
                 onRevoke={() => revoke(institution)}
+                onSync={(accountId) => sync(institution, accountId)}
               />
             ))}
           </ul>
@@ -140,19 +181,24 @@ export default function OpenFinancePage() {
 
 function InstitutionRow({
   institution,
+  accounts,
   busy,
   onConnect,
   onCheck,
   onRevoke,
+  onSync,
 }: {
   institution: OpenFinanceInstitution;
+  accounts: Account[];
   busy: boolean;
   onConnect: () => void;
   onCheck: () => void;
   onRevoke: () => void;
+  onSync: (accountId: string) => void;
 }) {
   const consent: OpenFinanceConsent | null = institution.consent;
   const status = consent?.status ?? null;
+  const [accountId, setAccountId] = useState(consent?.targetAccountId ?? '');
 
   return (
     <li id={`openfinance-instituicao-${institution.id}`} className="py-4">
@@ -176,6 +222,16 @@ function InstitutionRow({
                 ? 'Aguardando autorizacao no provedor'
                 : 'Sem conexao'}
           </div>
+          {status === 'authorized' && (
+            <div
+              id={`openfinance-sincronizado-${institution.id}`}
+              className="text-xs text-neutral-500"
+            >
+              {consent?.syncedCount
+                ? `${consent.syncedCount} lancamento(s) importado(s)`
+                : 'Nenhum lancamento importado'}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {!consent && (
@@ -215,6 +271,30 @@ function InstitutionRow({
           )}
           {status === 'authorized' && (
             <>
+              <select
+                className="input"
+                id={`openfinance-conta-${institution.id}`}
+                aria-label="Conta de destino"
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                disabled={busy}
+              >
+                <option value="">Selecione a conta</option>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn-primary"
+                id={`openfinance-sincronizar-${institution.id}`}
+                onClick={() => onSync(accountId)}
+                disabled={busy || !accountId}
+              >
+                <Download className="h-4 w-4" /> {busy ? 'Sincronizando...' : 'Sincronizar'}
+              </button>
               <button
                 type="button"
                 className="btn-outline"

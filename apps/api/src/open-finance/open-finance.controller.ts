@@ -8,7 +8,7 @@ import {
   type AuthenticatedUser,
 } from '../common/auth/auth.guard';
 import { OpenFinanceService } from './open-finance.service';
-import { CreateOpenFinanceConsentRequest } from './http/dto';
+import { CreateOpenFinanceConsentRequest, SyncOpenFinanceConsentRequest } from './http/dto';
 
 @ApiTags('open-finance')
 @Controller('financial-spaces/:spaceId/open-finance')
@@ -52,6 +52,19 @@ export class OpenFinanceController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.openFinance.refreshConsent(spaceId, consentId, user.sub);
+  }
+
+  @Post('consents/:consentId/sync')
+  @HttpCode(200)
+  @Roles(['owner', 'admin', 'contributor'])
+  @ApiOperation({ summary: 'Sincronizar lancamentos do consentimento (importacao incremental)' })
+  async sync(
+    @Param('spaceId') spaceId: string,
+    @Param('consentId') consentId: string,
+    @Body() body: SyncOpenFinanceConsentRequest,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.openFinance.syncConsent(spaceId, consentId, body, user.sub);
   }
 
   @Delete('consents/:consentId')

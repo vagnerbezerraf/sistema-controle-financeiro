@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createTestApp } from './utils/app';
 import { resetDatabase } from './utils/db';
-import { api, auth, bootstrapUser } from './utils/factory';
+import { api, auth, bootstrapUser, createAccount } from './utils/factory';
 
 const baseUrl = (spaceId: string) => `/api/v1/financial-spaces/${spaceId}/open-finance`;
 const institutionsUrl = (spaceId: string) => `${baseUrl(spaceId)}/institutions`;
@@ -32,6 +32,16 @@ function refreshConsent(app: INestApplication, token: string, spaceId: string, c
 
 function revokeConsent(app: INestApplication, token: string, spaceId: string, consentId: string) {
   return api(app).delete(`${consentsUrl(spaceId)}/${consentId}`).set(auth(token));
+}
+
+function syncConsent(
+  app: INestApplication,
+  token: string,
+  spaceId: string,
+  consentId: string,
+  body: Record<string, unknown> = {},
+) {
+  return api(app).post(`${consentsUrl(spaceId)}/${consentId}/sync`).set(auth(token)).send(body);
 }
 
 describe('E2E | Open Finance (consentimento)', () => {
@@ -158,5 +168,139 @@ describe('E2E | Open Finance (consentimento)', () => {
 
     const acessoIndevido = await listConsents(app, bob.accessToken, alice.spaceId);
     expect(acessoIndevido.status).toBe(403);
+  });
+});
+
+describe('E2E | Open Finance (sincronizacao incremental)', () => {
+  let app: INestApplication;
+  let prisma: PrismaClient;
+
+  beforeAll(async () => {
+    ({ app, prisma } = await createTestApp());
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  beforeEach(async () => {
+    await resetDatabase(prisma);
+  });
+
+  /** Cria o consentimento e o autoriza no provedor, devolvendo o id. */
+  async function authorizedConsent(
+    user: { accessToken: string; spaceId: string },
+    institutionId = 'banco-exemplo',
+  ): Promise<string> {
+    const criado = await createConsent(app, user.accessToken, user.spaceId, { institutionId });
+    await refreshConsent(app, user.accessToken, user.spaceId, criado.body.id);
+    return criado.body.id as string;
+  }
+
+  it('importa os lancamentos do consentimento autorizado na conta escolhida', async () => {
+    const user = await bootstrapUser(app);
+    const account = await createAccount(app, user.accessToken, user.spaceId);
+    const consentId = await authorizedConsent(user);
+
+    const sync = await syncConsent(app, user.accessToken, user.spaceId, consentId, {
+      accountId: account.id,
+    });
+    expect(sync.status).toBe(200);
+    expect(sync.body.importedCount).toBe(5);
+    expect(sync.body.hasMore).toBe(false);
+    expect(sync.body.consent.syncedCount).toBe(5);
+    expect(sync.body.consent.targetAccountId).toBe(account.id);
+    expect(typeof sync.body.consent.lastSyncedAt).toBe('string');
+
+    expect(await prisma.transaction.count({ where: { financialSpaceId: user.spaceId } })).toBe(5);
+
+    const despesa = await prisma.transaction.findFirst({
+      where: { financialSpaceId: user.spaceId, description: 'Compra no mercado' },
+      select: { type: true, totalAmount: true, status: true },
+    });
+    expect(despesa?.type).toBe('expense');
+    expect(despesa?.totalAmount.toFixed(2)).toBe('152.30');
+    expect(despesa?.status).toBe('confirmed');
+  });
+
+  it('e idempotente: nova sincronizacao nao reimporta os mesmos lancamentos', async () => {
+    const user = await bootstrapUser(app);
+    const account = await createAccount(app, user.accessToken, user.spaceId);
+    const consentId = await authorizedConsent(user);
+
+    const primeiro = await syncConsent(app, user.accessToken, user.spaceId, consentId, {
+      accountId: account.id,
+    });
+    expect(primeiro.body.importedCount).toBe(5);
+
+    const segundo = await syncConsent(app, user.accessToken, user.spaceId, consentId, {
+      accountId: account.id,
+    });
+    expect(segundo.status).toBe(200);
+    expect(segundo.body.importedCount).toBe(0);
+    expect(segundo.body.consent.syncedCount).toBe(5);
+
+    expect(await prisma.transaction.count({ where: { financialSpaceId: user.spaceId } })).toBe(5);
+  });
+
+  it('reaproveita a conta alvo gravada quando o corpo nao informa outra', async () => {
+    const user = await bootstrapUser(app);
+    const account = await createAccount(app, user.accessToken, user.spaceId);
+    const consentId = await authorizedConsent(user);
+
+    await syncConsent(app, user.accessToken, user.spaceId, consentId, { accountId: account.id });
+    const segundo = await syncConsent(app, user.accessToken, user.spaceId, consentId);
+    expect(segundo.status).toBe(200);
+    expect(segundo.body.consent.targetAccountId).toBe(account.id);
+  });
+
+  it('exige consentimento autorizado e conta de destino valida', async () => {
+    const user = await bootstrapUser(app);
+    const account = await createAccount(app, user.accessToken, user.spaceId);
+
+    const pendente = await createConsent(app, user.accessToken, user.spaceId, {
+      institutionId: 'banco-exemplo',
+    });
+    const semAutorizacao = await syncConsent(app, user.accessToken, user.spaceId, pendente.body.id, {
+      accountId: account.id,
+    });
+    expect(semAutorizacao.status).toBe(409);
+    expect(semAutorizacao.body.code).toBe('CONSENT_NOT_ACTIVE');
+
+    const consentId = await authorizedConsent(user, 'banco-digital');
+    const semConta = await syncConsent(app, user.accessToken, user.spaceId, consentId);
+    expect(semConta.status).toBe(400);
+    expect(semConta.body.code).toBe('MISSING_TARGET_ACCOUNT');
+
+    const contaInvalida = await syncConsent(app, user.accessToken, user.spaceId, consentId, {
+      accountId: '00000000-0000-0000-0000-000000000000',
+    });
+    expect(contaInvalida.status).toBe(400);
+    expect(contaInvalida.body.code).toBe('INVALID_ACCOUNT');
+  });
+
+  it('bloqueia sincronizacao de consentimento revogado', async () => {
+    const user = await bootstrapUser(app);
+    const account = await createAccount(app, user.accessToken, user.spaceId);
+    const consentId = await authorizedConsent(user);
+    await revokeConsent(app, user.accessToken, user.spaceId, consentId);
+
+    const sync = await syncConsent(app, user.accessToken, user.spaceId, consentId, {
+      accountId: account.id,
+    });
+    expect(sync.status).toBe(409);
+    expect(sync.body.code).toBe('CONSENT_NOT_ACTIVE');
+  });
+
+  it('isola a sincronizacao por espaco e recusa acesso de outro usuario', async () => {
+    const alice = await bootstrapUser(app);
+    const bob = await bootstrapUser(app);
+    const account = await createAccount(app, alice.accessToken, alice.spaceId);
+    const consentId = await authorizedConsent(alice);
+
+    const doBob = await syncConsent(app, bob.accessToken, alice.spaceId, consentId, {
+      accountId: account.id,
+    });
+    expect(doBob.status).toBe(403);
   });
 });

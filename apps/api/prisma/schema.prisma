@@ -689,6 +689,13 @@ model OpenFinanceConsent {
   consentUrl       String?
   expiresAt        DateTime?
   revokedAt        DateTime?
+  // Sincronizacao incremental: conta de destino dos lancamentos, cursor da
+  // proxima leitura no agregador, momento da ultima sincronizacao e os
+  // identificadores externos ja importados (para deduplicar).
+  targetAccountId  String?
+  syncCursor       String?
+  lastSyncedAt     DateTime?
+  syncedExternalIds String[]                  @default([])
   createdAt        DateTime                   @default(now())
   updatedAt        DateTime                   @updatedAt
   version          Int                        @default(0)

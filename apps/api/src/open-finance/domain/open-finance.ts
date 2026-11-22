@@ -10,6 +10,8 @@
  * Comentarios sem acentos por convencao do projeto.
  */
 
+import type { ProviderTransactionPage } from './sync';
+
 /** Situacao de um consentimento, do ponto de vista do SCF. */
 export type ConsentStatus = 'pending' | 'authorized' | 'rejected' | 'expired' | 'revoked';
 
@@ -45,6 +47,14 @@ export interface OpenFinanceProvider {
     redirectUrl: string;
   }): Promise<ProviderConsent>;
   getConsent(externalId: string): Promise<ProviderConsent | null>;
+  /**
+   * Lancamentos do consentimento, em paginas incrementais. Sem `cursor` devolve
+   * a primeira pagina; com o `cursor` da pagina anterior devolve a seguinte.
+   */
+  fetchTransactions(input: {
+    externalId: string;
+    cursor?: string | null;
+  }): Promise<ProviderTransactionPage>;
   revokeConsent(externalId: string): Promise<void>;
 }
 

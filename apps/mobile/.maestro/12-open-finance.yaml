@@ -25,6 +25,15 @@ appId: host.exp.exponent
     visible: "Conectado"
     timeout: 20000
 
+# Sincroniza os lancamentos na conta semeada (importacao incremental)
+- tapOn:
+    id: "openfinance-conta-banco-exemplo-Conta E2E"
+- tapOn:
+    id: "openfinance-sincronizar-banco-exemplo"
+- extendedWaitUntil:
+    visible: "5 lancamento(s) importado(s)"
+    timeout: 20000
+
 # Revoga o consentimento
 - tapOn:
     id: "openfinance-revogar-banco-exemplo"

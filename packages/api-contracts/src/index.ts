@@ -1253,9 +1253,31 @@ export interface OpenFinanceConsent {
   /** Validade do consentimento (ISO-8601) ou `null` quando sem prazo. */
   expiresAt: string | null;
   revokedAt: string | null;
+  /** Conta de destino dos lancamentos sincronizados; `null` se ainda nao definida. */
+  targetAccountId: string | null;
+  /** Momento da ultima sincronizacao incremental (ISO-8601) ou `null`. */
+  lastSyncedAt: string | null;
+  /** Quantos lancamentos externos ja foram importados por este consentimento. */
+  syncedCount: number;
   createdAt: string;
   updatedAt: string;
   version: number;
+}
+
+/** Resultado de uma sincronizacao incremental do consentimento. */
+export interface OpenFinanceSyncResult {
+  consent: OpenFinanceConsent;
+  /** Lancamentos novos criados nesta chamada. */
+  importedCount: number;
+  /** Lancamentos recebidos que ja constavam (nao importados). */
+  skippedCount: number;
+  /** `true` quando ainda ha mais paginas a sincronizar no agregador. */
+  hasMore: boolean;
+}
+
+export interface SyncOpenFinanceConsentRequest {
+  /** Conta de destino dos lancamentos. Padrao: a ultima conta usada. */
+  accountId?: string;
 }
 
 /** Instituicao do provedor de Open Finance, com o consentimento do espaco. */
