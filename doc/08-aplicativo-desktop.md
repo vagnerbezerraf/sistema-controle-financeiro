@@ -34,16 +34,16 @@ A matriz abaixo é a fonte de verdade do que o produto suporta. Cada linha corre
 
 | Sistema | Arquitetura | Versão mínima | Formatos | Canal de suporte |
 |---|---|---|---|---|
-| Windows | x86_64 | Windows 10 | MSI e NSIS | Download direto |
-| macOS | universal (x86_64 + arm64) | macOS 10.15 | DMG (`.app` incluso) | Download direto |
-| Linux | x86_64 | Ubuntu 22.04 (glibc 2.35+) | AppImage e Debian (`.deb`) | Download direto |
+| Windows | x86_64 | Windows 10 | MSI e NSIS | Download direto + loja |
+| macOS | universal (x86_64 + arm64) | macOS 10.15 | DMG (`.app` incluso) | Download direto + loja |
+| Linux | x86_64 | Ubuntu 22.04 (glibc 2.35+) | AppImage e Debian (`.deb`) | Download direto + loja |
 
 Notas:
 
 - Windows foi o primeiro alvo entregue (instaladores MSI/NSIS validados); esta matriz consolida e formaliza o suporte a macOS e Linux.
 - macOS é empacotado como binário **universal**, cobrindo Macs Intel e Apple Silicon em um único artefato.
 - Linux usa `ubuntu-22.04` como base de build; o `.deb` declara `libwebkit2gtk-4.1-0` e `libgtk-3-0` como dependências, e o AppImage embute o media framework.
-- A distribuição é por **download direto** enquanto não houver loja ou repositório próprios. Assinatura e notarização seguem a seção “Assinatura de release”.
+- O canal principal é o **download direto**; a publicação em **lojas** é um canal adicional (ver “Decisões pendentes”). Assinatura e notarização seguem a seção “Assinatura de release”.
 
 ## Arquitetura
 
@@ -285,7 +285,7 @@ Também devem ser testados:
 ## Decisões pendentes
 
 - ~~Confirmar o primeiro sistema operacional e as arquiteturas suportadas.~~ **Definido** na “Matriz oficial de plataformas”: Windows é o primeiro alvo; macOS (universal) e Linux (x86_64) são suportados.
-- Escolher loja, download direto ou ambos por plataforma.
+- ~~Escolher loja, download direto ou ambos por plataforma.~~ **Definido:** ambos — **download direto** é o canal principal e a **publicação em lojas** é canal adicional (Microsoft Store, Mac App Store e Snapcraft/Flatpak).
 - Definir se atualização será automática, assistida ou obrigatória em correções críticas.
 - Definir o nível de operação offline necessário.
 - Confirmar se bandeja do sistema, múltiplas janelas e inicialização automática entregam valor real.

@@ -13,7 +13,7 @@ Eliminar ambiguidades de produto e preparar uma base pequena que possa ser entre
 ### Entregas
 
 - Entrevistas e protótipo dos fluxos de registro, parcelamento, fatura e planejamento.
-- Validação das decisões listadas no [índice](./README.md#decisões-que-precisam-de-validação-do-produto).
+- ✅ Validação das decisões listadas no [índice](./README.md#decisões-que-precisam-de-validação-do-produto) — as 9 perguntas decididas (ver [Status de validação](./README.md#status-de-validação-das-decisões)).
 - Definição do glossário e das regras financeiras.
 - Monorepo, padrões de código e pipeline.
 - Ambientes local e de homologação.

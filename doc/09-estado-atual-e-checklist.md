@@ -438,7 +438,7 @@
 
 ---
 
-## 3. O que AINDA FALTA na Fase 0
+## 3. Fase 0 — o que faltava (agora concluído)
 
 | Prioridade | Item | Motivo |
 |---|---|---|
@@ -451,7 +451,7 @@
 | ✅ | **OIDC/PKCE (provedor externo)** | Concluído — Authorization Code + PKCE (S256) com Keycloak 26 em Docker; endpoints `/identity/oidc/config` e `/identity/oidc/exchange`; decisão em [doc/11-adr-oidc-pkce.md](./11-adr-oidc-pkce.md). |
 | ✅ | **MFA e recuperação de senha** | Concluído — MFA (TOTP) com setup/enable/disable e códigos de recuperação; fluxo `password/forgot` + `password/reset` no web e mobile. |
 | ✅ | **Build real do desktop (Tauri 2 + Rust)** | Concluído — toolchain Rust (rustup/stable, MSVC x64), `tauri build` gera `scf-desktop.exe` e instaladores **MSI** (`SCF_0.1.0_x64_pt-BR.msi`) e **NSIS** (`SCF_0.1.0_x64-setup.exe`); janela nativa (WebView2) validada sem crash. Plugin `updater` removido do scaffold (sem canal de releases/chave) para não abortar na inicialização. |
-| ✅ | **Validação das 9 perguntas de produto** | Registrada em [`doc/README.md` § Status de validação das decisões](./README.md#status-de-validação-das-decisões): **6 decididas e comprovadas pelo código** (#1, #2, #5, #6, #7, #8) e **#9 parcial** (download direto definido); ficam abertas, por serem de produto, **#3** (monetização), **#4** (infraestrutura de hospedagem) e a parte de loja do **#9**. Não bloqueia código. |
+| ✅ | **Validação das 9 perguntas de produto** | **Todas decididas** — registro em [`doc/README.md` § Status de validação das decisões](./README.md#status-de-validação-das-decisões): 6 comprovadas pelo código (#1, #2, #5, #6, #7, #8) e 3 validadas pelo produto em 23/11/2026 — **#3** monetização (gratuito + planos pagos), **#4** hospedagem em **nuvem Google** e **#9** desktop por **download direto + lojas**. |
 
 ---
 
