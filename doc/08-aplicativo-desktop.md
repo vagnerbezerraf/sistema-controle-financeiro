@@ -28,6 +28,23 @@ Para controlar custo de testes, assinatura e suporte, a liberação pode ser esc
 
 “Compatível com Tauri” não significa automaticamente “suportado pelo produto”. A matriz oficial deverá indicar sistema, arquitetura, versão mínima, formato do instalador e canal de suporte.
 
+### Matriz oficial de plataformas
+
+A matriz abaixo é a fonte de verdade do que o produto suporta. Cada linha corresponde a um job de build no sistema operacional nativo (ver “Pipeline de release”).
+
+| Sistema | Arquitetura | Versão mínima | Formatos | Canal de suporte |
+|---|---|---|---|---|
+| Windows | x86_64 | Windows 10 | MSI e NSIS | Download direto |
+| macOS | universal (x86_64 + arm64) | macOS 10.15 | DMG (`.app` incluso) | Download direto |
+| Linux | x86_64 | Ubuntu 22.04 (glibc 2.35+) | AppImage e Debian (`.deb`) | Download direto |
+
+Notas:
+
+- Windows foi o primeiro alvo entregue (instaladores MSI/NSIS validados); esta matriz consolida e formaliza o suporte a macOS e Linux.
+- macOS é empacotado como binário **universal**, cobrindo Macs Intel e Apple Silicon em um único artefato.
+- Linux usa `ubuntu-22.04` como base de build; o `.deb` declara `libwebkit2gtk-4.1-0` e `libgtk-3-0` como dependências, e o AppImage embute o media framework.
+- A distribuição é por **download direto** enquanto não houver loja ou repositório próprios. Assinatura e notarização seguem a seção “Assinatura de release”.
+
 ## Arquitetura
 
 ```mermaid
@@ -135,9 +152,11 @@ Uma instalação não troca de canal silenciosamente. O número de versão deve 
 
 ### Artefatos
 
-- Windows: instalador MSI ou NSIS, conforme validação operacional.
-- macOS: DMG ou App Store, com assinatura e notarização.
-- Linux: iniciar com um ou dois formatos definidos, como AppImage e pacote Debian, evitando prometer suporte a todas as distribuições.
+- Windows: instaladores MSI e NSIS (entregues).
+- macOS: DMG (com o `.app` incluso); a assinatura e a notarização entram no pipeline quando o certificado existir.
+- Linux: AppImage e pacote Debian (`.deb`), sem prometer suporte a todas as distribuições.
+
+Os formatos de macOS e Linux são gerados automaticamente pelo workflow [`.github/workflows/desktop-release.yml`](../.github/workflows/desktop-release.yml) (ver “Pipeline de release”).
 
 Tauri fornece empacotamento por plataforma e documenta a exigência de assinatura na maioria dos canais: [distribuição do Tauri](https://v2.tauri.app/distribute/). No Windows, são suportados instaladores MSI e NSIS: [instalador Windows](https://v2.tauri.app/distribute/windows-installer/).
 
@@ -150,6 +169,17 @@ Tauri fornece empacotamento por plataforma e documenta a exigência de assinatur
 - exigir atualização quando a versão da API deixar de ser compatível, com mensagem clara;
 - preservar dados locais compatíveis e ter recuperação para falha de instalação;
 - impedir downgrade não autorizado que reintroduza vulnerabilidade ou esquema local incompatível.
+
+### Pipeline de release
+
+O workflow [`.github/workflows/desktop-release.yml`](../.github/workflows/desktop-release.yml) gera os artefatos de macOS e Linux em runners nativos, disparado por tag `v*` ou manualmente (`workflow_dispatch`):
+
+- **Linux** (`ubuntu-22.04`): instala as dependências de sistema do WebKitGTK, compila com o toolchain Rust estável e roda `tauri build --bundles deb,appimage`, publicando `.deb` e `.AppImage`.
+- **macOS** (`macos-latest`): adiciona os alvos `aarch64-apple-darwin` e `x86_64-apple-darwin`, compila `tauri build --bundles app,dmg --target universal-apple-darwin` e publica o `.dmg` (com o `.app`).
+- **Integridade**: cada job calcula um **SHA-256** de cada artefato e o publica como `SHA256SUMS.txt` junto do binário.
+- **Cache**: o cache do Cargo (`Swatinem/rust-cache`) reduz o tempo de build entre execuções.
+
+Enquanto o certificado não existe, o pipeline gera apenas artefatos **não assinados** para homologação e testes internos. A assinatura e a notarização seguem a seção “Assinatura de release” e só entram no CI quando o certificado estiver provisionado.
 
 ## Assinatura de release
 
@@ -254,7 +284,7 @@ Também devem ser testados:
 
 ## Decisões pendentes
 
-- Confirmar o primeiro sistema operacional e as arquiteturas suportadas.
+- ~~Confirmar o primeiro sistema operacional e as arquiteturas suportadas.~~ **Definido** na “Matriz oficial de plataformas”: Windows é o primeiro alvo; macOS (universal) e Linux (x86_64) são suportados.
 - Escolher loja, download direto ou ambos por plataforma.
 - Definir se atualização será automática, assistida ou obrigatória em correções críticas.
 - Definir o nível de operação offline necessário.

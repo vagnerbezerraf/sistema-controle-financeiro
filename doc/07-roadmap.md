@@ -126,7 +126,7 @@ Adicionar automação externa somente depois de o núcleo estar estável.
 - ✅ **Open Finance (agregador com consentimento)** — entregue (6ª fatia da Fase 5): consentimento por espaço/instituição com ciclo de vida (`pending`/`authorized`/`rejected`/`expired`/`revoked`), conectar/listar/reconsultar/revogar atrás de um `OpenFinanceProvider` injetável (stub de desenvolvimento, sem rede), com paridade Web/Desktop/Mobile; ver checklist §2.41.
 - ✅ **Sincronização incremental** — entregue (7ª fatia da Fase 5): importação dos lançamentos do agregador para uma conta do espaço em **páginas por cursor**, **deduplicados por identificador externo**, gravando `Transaction`+`Posting` numa única transação junto do cursor/`lastSyncedAt`/auditoria, com paridade Web/Desktop/Mobile; ver checklist §2.42.
 - ✅ **Sincronização automática do Open Finance** — entregue (8ª fatia da Fase 5): job repetível no worker (`open-finance:sync`, a cada 6h) que percorre os consentimentos **autorizados** e importa o que houver de novo, reusando as decisões da sync manual, com **idempotência por identificador externo** e **tolerância à indisponibilidade** de cada provedor; ver checklist §2.43.
-- Distribuição oficial do desktop para sistemas operacionais ainda não cobertos.
+- ✅ **Distribuição oficial do desktop (Linux e macOS)** — entregue (9ª fatia da Fase 5): **matriz oficial de plataformas** (sistema, arquitetura, versão mínima, formato e canal) documentada e workflow `.github/workflows/desktop-release.yml` que gera **AppImage + `.deb`** (`ubuntu-22.04`) e **DMG universal** (`macos-latest`) em runners nativos, com **SHA-256** por artefato; ver checklist §2.44.
 - Separação física de módulos que apresentem gargalo comprovado.
 
 ### Critério de saída
