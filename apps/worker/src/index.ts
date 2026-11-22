@@ -9,6 +9,11 @@ import { createPrismaReportStore, createReportProcessor } from './reports';
 import { createPrismaReportCacheStore, createReportCacheProcessor } from './report-cache';
 import { createPrismaRecurrenceStore, createRecurrenceProcessor } from './recurrence';
 import { createPrismaReminderStore, createReminderProcessor } from './reminders';
+import {
+  createOpenFinanceSyncProcessor,
+  createPrismaOpenFinanceSyncStore,
+  createStubOpenFinanceTransactionProvider,
+} from './open-finance-sync';
 import { createMailNotifier, createMailSender } from './mail';
 
 const logger = pino({ name: 'scf-worker' });
@@ -20,6 +25,8 @@ const OUTBOX_POLL_INTERVAL_MS = 30_000;
 const RECURRENCE_CRON = '0 3 * * *';
 const REPORTS_CACHE_CRON = '0 4 * * *';
 const REMINDER_CRON = '0 8 * * *';
+/** Sincronizacao automatica dos consentimentos de Open Finance a cada 6 horas. */
+const OPEN_FINANCE_SYNC_CRON = '0 */6 * * *';
 const SCHEDULE_TZ = 'America/Sao_Paulo';
 
 const env = cleanEnv(process.env, {
@@ -58,6 +65,7 @@ type JobTypes = {
   'obligations:reminder': { spaceId?: string };
   'recurrence:generate': { ruleId?: string; upToDate?: string };
   'reports:cache': { retentionDays?: number };
+  'open-finance:sync': { consentId?: string };
 };
 
 type JobName = keyof JobTypes;
@@ -67,6 +75,7 @@ export const QUEUES = {
   obligations: 'scf.obligations',
   recurrence: 'scf.recurrence',
   reports: 'scf.reports',
+  openFinance: 'scf.open-finance',
 } as const;
 
 type QueueKey = keyof typeof QUEUES;
@@ -76,6 +85,7 @@ const queuesByJob: Record<JobName, QueueKey> = {
   'obligations:reminder': 'obligations',
   'recurrence:generate': 'recurrence',
   'reports:cache': 'reports',
+  'open-finance:sync': 'openFinance',
 };
 
 const queueInstances: Record<string, Queue> = {};
@@ -137,6 +147,14 @@ async function bootstrap() {
   const reminderProcessor = createReminderProcessor({
     store: createPrismaReminderStore(prisma),
     notifier: createMailNotifier(mailSender),
+    logger,
+  });
+
+  // Importa periodicamente os lancamentos dos consentimentos de Open Finance
+  // autorizados, reusando as mesmas decisoes da sync manual da API.
+  const openFinanceSyncProcessor = createOpenFinanceSyncProcessor({
+    store: createPrismaOpenFinanceSyncStore(prisma),
+    provider: createStubOpenFinanceTransactionProvider(),
     logger,
   });
 
@@ -207,6 +225,15 @@ async function bootstrap() {
     await reportCacheProcessor.prune(data?.retentionDays);
   });
 
+  makeWorker('openFinance', async (_name, data: { consentId?: string }) => {
+    // Com `consentId`, sincroniza so aquele consentimento (pedido pontual).
+    if (data?.consentId) {
+      await openFinanceSyncProcessor.syncConsent(data.consentId);
+    } else {
+      await openFinanceSyncProcessor.runAll();
+    }
+  });
+
   // Agenda o ciclo do outbox como job repetivel (um por intervalo). O `add`
   // repetivel e idempotente por chave, entao reiniciar o worker nao acumula
   // agendamentos duplicados.
@@ -240,6 +267,15 @@ async function bootstrap() {
       { repeat: { pattern: REMINDER_CRON, tz: SCHEDULE_TZ }, removeOnComplete: true, removeOnFail: 100 },
     )
     .catch((e: unknown) => logger.warn({ err: (e as Error)?.message }, 'Nao foi possivel agendar os lembretes de vencimento'));
+
+  // Sincronizacao automatica dos consentimentos de Open Finance a cada 6 horas.
+  await getQueue('openFinance')
+    .add(
+      'open-finance:sync',
+      {},
+      { repeat: { pattern: OPEN_FINANCE_SYNC_CRON, tz: SCHEDULE_TZ }, removeOnComplete: true, removeOnFail: 100 },
+    )
+    .catch((e: unknown) => logger.warn({ err: (e as Error)?.message }, 'Nao foi possivel agendar a sincronizacao de Open Finance'));
 
   const shutdown = async (sig: string) => {
     logger.info({ sig }, 'Encerrando worker...');
