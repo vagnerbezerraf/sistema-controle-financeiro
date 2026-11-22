@@ -62,3 +62,21 @@ Antes da implementação, convém confirmar:
 9. O desktop será distribuído por lojas, download direto ou ambos?
 
 Essas respostas alteram escopo, custo, modelo de dados e requisitos de segurança.
+
+## Status de validação das decisões
+
+Registro do que já foi **decidido e comprovado pelo código entregue** e do que continua **em aberto para o produto** (última revisão: 22 de novembro de 2026). As decisões marcadas como abertas dependem do responsável de produto e não bloqueiam o código já entregue.
+
+| # | Decisão | Status | Evidência / pendência |
+|---|---|---|---|
+| 1 | Pessoal ou familiar desde o MVP? | ✅ Decidido: familiar contemplado | Espaços familiares, convites e papéis entregues — [checklist §2.30](./09-estado-atual-e-checklist.md) |
+| 2 | Cartão de crédito e fatura no primeiro lançamento? | ✅ Decidido: sim | Cartões e faturas entregues — [checklist §2.16](./09-estado-atual-e-checklist.md) |
+| 3 | Versão gratuita e planos pagos? | ⚪ Em aberto | Modelo de negócio; nada no código pressupõe cobrança |
+| 4 | Hospedagem: nuvem pública, infraestrutura própria ou ambos? | ⚪ Em aberto (portabilidade garantida) | Dockerfiles + `docker-compose.staging.yml` — [checklist §2.7](./09-estado-atual-e-checklist.md); a decisão de infraestrutura permanece do produto |
+| 5 | CSV/OFX e Open Finance em qual fase? | ✅ Decidido | CSV/OFX na Fase 4 (§2.27, §2.28) e Open Finance na Fase 5 (§2.41–§2.43) — [roadmap](./07-roadmap.md) |
+| 6 | Comprovantes no MVP? | ✅ Decidido: sim | Comprovantes entregues — [checklist §2.33](./09-estado-atual-e-checklist.md) |
+| 7 | Operar sem internet no mobile e desktop? | ✅ Decidido: sim (offline-first parcial) | Núcleo `@scf/offline` no Desktop/Mobile (§2.39) e no Web (§2.40) — [checklist](./09-estado-atual-e-checklist.md) |
+| 8 | Qual sistema operacional desktop primeiro? | ✅ Decidido: Windows | Matriz oficial de plataformas — [doc/08](./08-aplicativo-desktop.md#matriz-oficial-de-plataformas) |
+| 9 | Desktop por lojas, download direto ou ambos? | ◑ Parcial | Download direto definido — [doc/08](./08-aplicativo-desktop.md); o uso de lojas permanece em aberto |
+
+Itens ainda em aberto: **#3** (monetização), **#4** (infraestrutura de hospedagem) e a parte de loja do **#9** (download direto já definido).

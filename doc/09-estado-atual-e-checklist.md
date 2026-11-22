@@ -451,7 +451,7 @@
 | ✅ | **OIDC/PKCE (provedor externo)** | Concluído — Authorization Code + PKCE (S256) com Keycloak 26 em Docker; endpoints `/identity/oidc/config` e `/identity/oidc/exchange`; decisão em [doc/11-adr-oidc-pkce.md](./11-adr-oidc-pkce.md). |
 | ✅ | **MFA e recuperação de senha** | Concluído — MFA (TOTP) com setup/enable/disable e códigos de recuperação; fluxo `password/forgot` + `password/reset` no web e mobile. |
 | ✅ | **Build real do desktop (Tauri 2 + Rust)** | Concluído — toolchain Rust (rustup/stable, MSVC x64), `tauri build` gera `scf-desktop.exe` e instaladores **MSI** (`SCF_0.1.0_x64_pt-BR.msi`) e **NSIS** (`SCF_0.1.0_x64-setup.exe`); janela nativa (WebView2) validada sem crash. Plugin `updater` removido do scaffold (sem canal de releases/chave) para não abortar na inicialização. |
-| ⚪ 2 | **Validação das 9 perguntas de produto** | Em aberto em [`doc/README.md`](./README.md#L50-L62). Não bloqueia código. |
+| ✅ | **Validação das 9 perguntas de produto** | Registrada em [`doc/README.md` § Status de validação das decisões](./README.md#status-de-validação-das-decisões): **6 decididas e comprovadas pelo código** (#1, #2, #5, #6, #7, #8) e **#9 parcial** (download direto definido); ficam abertas, por serem de produto, **#3** (monetização), **#4** (infraestrutura de hospedagem) e a parte de loja do **#9**. Não bloqueia código. |
 
 ---
 
@@ -746,4 +746,4 @@ Ordem recomendada (todos concluídos):
 8. ✅ **Homologação (staging)** — Dockerfiles + [`docker-compose.staging.yml`](../docker-compose.staging.yml) + job de build das imagens no CI.
 9. ✅ **Build Tauri real** — `tauri build` com a toolchain Rust + WebView2 gerando `scf-desktop.exe` e instaladores MSI/NSIS; janela nativa validada sem crash.
 
-**Fase 0 fechada.** Próximo: continuação da Fase 1 — **testes E2E da API (52 verdes)**, **da Web (7 verdes, Playwright)**, **do Mobile (5 fluxos verdes, Maestro)** e **do Desktop (6 verdes, tauri-driver/WebdriverIO)** concluídos; **estornos formalizados** (§2.12), **concorrência otimista** (§2.13) e **exportação CSV** (§2.14) entregues. Restam pendências menores da Fase 1 (**etiquetas** com filtro/UI e **assinatura de release** do desktop) antes de abrir a Fase 2 (compromissos e crédito).
+**Fase 0 fechada.** Próximo: continuação da Fase 1 — **testes E2E da API (52 verdes)**, **da Web (7 verdes, Playwright)**, **do Mobile (5 fluxos verdes, Maestro)** e **do Desktop (6 verdes, tauri-driver/WebdriverIO)** concluídos; **estornos formalizados** (§2.12), **concorrência otimista** (§2.13) e **exportação CSV** (§2.14) entregues. As pendências menores da Fase 1 foram concluídas — **etiquetas** com filtro/UI (§2.15) e **assinatura de release** do desktop (estratégia em [doc/08](./08-aplicativo-desktop.md#assinatura-de-release)) —, de modo que as **Fases 1 a 4 estão 100%** e a **Fase 5 está em andamento** (§2.34–§2.44).
