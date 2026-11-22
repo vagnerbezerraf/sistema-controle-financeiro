@@ -133,6 +133,23 @@ Adicionar automação externa somente depois de o núcleo estar estável.
 
 Cada integração possui consentimento, revogação, reconciliação, telemetria, tratamento de indisponibilidade e processo de suporte definidos.
 
+## Fase 6 — produto comercial e infraestrutura gerenciada
+
+### Objetivo
+
+Transformar o sistema já funcional em produto comercializável: provedor **real** de Open Finance, hospedagem gerenciada na **nuvem Google**, **monetização** (gratuito + planos pagos) e publicação do desktop em **lojas**. Todas as frentes dependem de **decisões/credenciais externas** e **não alteram o núcleo já entregue** — reaproveitam os contratos, o domínio e o pipeline existentes.
+
+### Possíveis entregas
+
+- **Open Finance real** — substituir o stub de desenvolvimento por um provedor/agregador real (sob contrato regulado) atrás do **mesmo** `OpenFinanceProvider`, com **seleção por configuração** no lugar do binding fixo atual ([`open-finance.module.ts`](../apps/api/src/open-finance/open-finance.module.ts)); o consentimento, a sincronização incremental e a sync automática já estão prontos e passam a operar sem mudança de contrato. Depende de contrato e credenciais do agregador.
+- **Hospedagem na nuvem Google** — provisionar a plataforma na **Google Cloud** (banco, cache e demais serviços gerenciados, gestão de segredos e rede), com pipeline de deploy e ambientes reproduzíveis; preserva a portabilidade já garantida pelos containers e pelo `docker-compose.staging.yml`.
+- **Monetização** — versão gratuita + planos pagos: modelo de **planos e limites** (entitlements) no domínio e no banco, **cobrança** por provedor externo e telas de assinatura. Depende da escolha do provedor de cobrança.
+- **Publicação em lojas** — empacotar e publicar o desktop na **Microsoft Store** (MSIX), **Mac App Store** (sandbox + entitlements) e **Snapcraft/Flatpak**, como canal adicional ao **download direto**; depende das contas de desenvolvedor e dos certificados de assinatura (ver [doc/08](./08-aplicativo-desktop.md#assinatura-de-release)).
+
+### Critério de saída
+
+Cada frente opera em produção com credenciais próprias: o Open Finance sincroniza com um agregador real sob consentimento; a plataforma roda na nuvem Google com deploy reproduzível; a monetização cobra e aplica limites por plano; e o desktop está publicado nas lojas com assinatura e atualização funcionando.
+
 ## Ordem recomendada dos primeiros fluxos
 
 1. Autenticar e criar espaço financeiro.
@@ -165,4 +182,4 @@ Em todas as fases:
 
 ## Próxima decisão recomendada
 
-Antes de gerar código, transformar as perguntas abertas em decisões de produto e detalhar histórias da Fase 0 e da Fase 1 com critérios de aceite. O primeiro protótipo deve incluir também compra parcelada e fatura, mesmo que a implementação venha depois, porque esses fluxos influenciam o modelo de dados central.
+As perguntas de produto estão decididas (ver [status no índice](./README.md#status-de-validação-das-decisões)) e o roadmap até a Fase 5 está entregue. A **Fase 6** depende de **pré-requisitos externos** — contrato com o agregador de Open Finance, projeto na nuvem Google, provedor de cobrança e contas/certificados das lojas —, então a próxima decisão é **escolher qual dessas frentes abrir primeiro** e obter as credenciais correspondentes.
